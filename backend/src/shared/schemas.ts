@@ -32,11 +32,98 @@ export const CreateColaboradorSchema = z.object({
   cedula: z.string().min(1),
   fechaNacimiento: isoDate.optional(),
   cargo: z.string().optional(),
+  email: z.string().email().optional(),
+  telefono: z.string().optional(),
+  area: z.string().optional(),
+  jefeId: z.uuid().optional(),
+  estado: z.enum(["activo", "inactivo"]).optional(),
+  estadoVinculacion: z.enum(["activo", "retirado"]).optional(),
+  presencia: z.enum(["en_oficina", "vacaciones", "permiso", "incapacidad"]).optional(),
+  riesgo: z.enum(["alto", "medio", "bajo"]).optional(),
+  fueros: z.array(z.string()).optional(),
+  arlNivel: z.number().int().min(1).max(5).optional(),
+  origen: z.enum(["manual", "contrato"]).optional(),
 });
 export type CreateColaboradorInput = z.infer<typeof CreateColaboradorSchema>;
 
 export const UpdateColaboradorSchema = CreateColaboradorSchema.partial();
 export type UpdateColaboradorInput = z.infer<typeof UpdateColaboradorSchema>;
+
+// ── Areas ─────────────────────────────────────────────────────────────
+export const CreateAreaSchema = z.object({
+  nombre: z.string().min(1),
+  orden: z.number().int().optional(),
+});
+export type CreateAreaInput = z.infer<typeof CreateAreaSchema>;
+
+export const UpdateAreaSchema = z.object({
+  nombre: z.string().min(1).optional(),
+  orden: z.number().int().optional(),
+});
+export type UpdateAreaInput = z.infer<typeof UpdateAreaSchema>;
+
+// ── Timesheet ──────────────────────────────────────────────────────────
+const TIPO_HORA_VALUES = [
+  "extra_diurna", "extra_nocturna", "recargo_nocturno",
+  "recargo_dom_fest", "recargo_dom_fest_nocturno",
+  "extra_dom_fest_diurna", "extra_dom_fest_nocturna",
+  "pto", "permiso", "incapacidad", "ordinaria",
+] as const;
+
+export const CreateTimesheetSchema = z.object({
+  colaboradorId: z.uuid(),
+  fecha: isoDate,
+  horas: z.number().min(0.5).max(24),
+  tipo: z.enum(TIPO_HORA_VALUES),
+  notas: z.string().optional(),
+});
+export type CreateTimesheetInput = z.infer<typeof CreateTimesheetSchema>;
+
+// ── Disciplinario ──────────────────────────────────────────────────────
+export const CreateExpedienteSchema = z.object({
+  colaboradorId: z.uuid(),
+  hechos: z.string().min(1),
+  fechaHechos: isoDate,
+  gravedad: z.enum(["leve", "grave", "gravisima"]),
+  normaVulnerada: z.string().optional(),
+  fechaDiligencia: isoDate.optional(),
+  hora: z.string().optional(),
+  modalidad: z.enum(["Presencial", "Virtual"]).optional(),
+  lugar: z.string().optional(),
+  asistentes: z.string().optional(),
+  ciudad: z.string().optional(),
+  cartaTexto: z.string().optional(),
+});
+export type CreateExpedienteInput = z.infer<typeof CreateExpedienteSchema>;
+
+export const UpdateExpedienteSchema = z.object({
+  hechos: z.string().optional(),
+  fechaHechos: isoDate.optional(),
+  gravedad: z.enum(["leve", "grave", "gravisima"]).optional(),
+  normaVulnerada: z.string().optional(),
+  fechaDiligencia: isoDate.optional(),
+  hora: z.string().optional(),
+  modalidad: z.enum(["Presencial", "Virtual"]).optional(),
+  lugar: z.string().optional(),
+  asistentes: z.string().optional(),
+  ciudad: z.string().optional(),
+  estado: z.enum(["abierto", "cerrado"]).optional(),
+  cartaTexto: z.string().optional(),
+  etapas: z.record(z.string(), z.boolean()).optional(),
+  notificado: z.array(z.object({ canal: z.enum(["email", "telefono"]), fecha: isoDate })).optional(),
+});
+export type UpdateExpedienteInput = z.infer<typeof UpdateExpedienteSchema>;
+
+// ── Novedades ──────────────────────────────────────────────────────────
+export const CreateNovedadSchema = z.object({
+  colaboradorId: z.uuid(),
+  tipo: z.string().min(1),
+  descripcion: z.string().optional(),
+  fecha: isoDate,
+  monto: z.number().optional(),
+  origen: z.string().optional(),
+});
+export type CreateNovedadInput = z.infer<typeof CreateNovedadSchema>;
 
 // UUID en params de ruta.
 export const IdParamSchema = z.object({ id: z.uuid() });

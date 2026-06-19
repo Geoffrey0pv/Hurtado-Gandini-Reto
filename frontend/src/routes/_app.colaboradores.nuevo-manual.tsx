@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
-import { areas, fuerosOptions } from "@/lib/mock/data";
-import { useEmployees } from "@/lib/store";
+import { fuerosOptions } from "@/lib/mock/data";
+import { useAreas } from "@/hooks/useAreas";
+import { useCreateColaborador } from "@/hooks/useColaboradores";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/colaboradores/nuevo-manual")({
@@ -32,16 +33,19 @@ const sections = [
 
 function ManualWizard() {
   const [step, setStep] = useState(0);
+  const { data: areasData = [] } = useAreas();
+  const areaNames = areasData.map((a) => a.nombre);
+  const firstArea = areaNames[0] ?? "";
   const [data, setData] = useState({
     nombre: "", cedula: "", correo: "", telefono: "",
     tipoContrato: "Término indefinido", fechaInicio: "", fechaTerminacion: "",
-    cargo: "", area: areas[0], jefe: "",
+    cargo: "", area: firstArea, jefe: "",
     salario: "", jornada: "Lunes a viernes, 8:00 a 17:00",
     obligaciones: "",
     fueros: [] as string[],
     estado: "activo" as "activo" | "inactivo",
   });
-  const { addEmployee } = useEmployees();
+  const createColaborador = useCreateColaborador();
   const navigate = useNavigate();
 
   function set<K extends keyof typeof data>(k: K, v: (typeof data)[K]) {
@@ -51,22 +55,27 @@ function ManualWizard() {
     setData((d) => ({ ...d, fueros: d.fueros.includes(f) ? d.fueros.filter((x) => x !== f) : [...d.fueros, f] }));
   }
 
-  function commit() {
-    const id = `emp-${Date.now()}`;
-    addEmployee({
-      id, ...data,
-      tipoContrato: data.tipoContrato as any,
-      salario: Number(data.salario.replace(/[^0-9]/g, "")) || 0,
-      obligaciones: data.obligaciones.split("\n").map((s) => s.trim()).filter(Boolean),
-      fechaTerminacion: data.fechaTerminacion || null,
-      riesgo: "bajo",
-      estadoVinculacion: "activo",
-      presencia: "en_oficina",
-      alertasActivas: 0,
-      origen: "manual",
-    });
-    toast.success("Colaborador creado", { description: `${data.nombre || "Registro"} agregado al organigrama.` });
-    navigate({ to: "/colaboradores/$id", params: { id } });
+  async function commit() {
+    try {
+      const row = await createColaborador.mutateAsync({
+        nombre: data.nombre,
+        cedula: data.cedula,
+        cargo: data.cargo || undefined,
+        email: data.correo || undefined,
+        telefono: data.telefono || undefined,
+        area: data.area || undefined,
+        fueros: data.fueros,
+        estado: data.estado,
+        estadoVinculacion: "activo",
+        presencia: "en_oficina",
+        riesgo: "bajo",
+        origen: "manual",
+      });
+      toast.success("Colaborador creado", { description: `${data.nombre || "Registro"} agregado al organigrama.` });
+      navigate({ to: "/colaboradores/$id", params: { id: row.id } });
+    } catch {
+      toast.error("Error al crear el colaborador");
+    }
   }
 
   return (
@@ -123,7 +132,7 @@ function ManualWizard() {
                 <Field label="Área">
                   <Select value={data.area} onValueChange={(v) => set("area", v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{areas.map((a) => (<SelectItem key={a} value={a}>{a}</SelectItem>))}</SelectContent>
+                    <SelectContent>{areaNames.map((a) => (<SelectItem key={a} value={a}>{a}</SelectItem>))}</SelectContent>
                   </Select>
                 </Field>
               </Grid>

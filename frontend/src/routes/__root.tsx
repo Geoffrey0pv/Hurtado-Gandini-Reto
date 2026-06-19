@@ -14,12 +14,8 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { EmployeesProvider } from "@/lib/store";
-import { TimesheetProvider } from "@/lib/timesheet-store";
 import { LiquidacionProvider } from "@/lib/liquidacion-store";
-import { NovedadesProvider } from "@/lib/novedades-store";
 import { ObligacionesProvider } from "@/lib/obligaciones-store";
-import { DocumentosProvider } from "@/lib/documentos-store";
-import { DisciplinarioProvider } from "@/lib/disciplinario-store";
 
 function NotFoundComponent() {
   return (
@@ -125,22 +121,14 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <EmployeesProvider>
-        <TimesheetProvider>
-          <LiquidacionProvider>
-            <NovedadesProvider>
-              <ObligacionesProvider>
-                <DocumentosProvider>
-                  <DisciplinarioProvider>
-                    <TooltipProvider delayDuration={150}>
-                      <Outlet />
-                      <Toaster position="top-right" theme="dark" richColors closeButton />
-                    </TooltipProvider>
-                  </DisciplinarioProvider>
-                </DocumentosProvider>
-              </ObligacionesProvider>
-            </NovedadesProvider>
-          </LiquidacionProvider>
-        </TimesheetProvider>
+        <LiquidacionProvider>
+          <ObligacionesProvider>
+            <TooltipProvider delayDuration={150}>
+              <Outlet />
+              <Toaster position="top-right" theme="dark" richColors closeButton />
+            </TooltipProvider>
+          </ObligacionesProvider>
+        </LiquidacionProvider>
       </EmployeesProvider>
     </QueryClientProvider>
   );

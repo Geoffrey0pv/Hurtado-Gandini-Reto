@@ -1,12 +1,12 @@
 import { Outlet, redirect, createFileRoute } from "@tanstack/react-router";
 import { InstitutionalTopbar } from "@/components/layout/InstitutionalTopbar";
 import { FloatingCommandDock } from "@/components/layout/FloatingCommandDock";
+import { isAuthenticated } from "@/lib/auth";
 
 export const Route = createFileRoute("/_app")({
   beforeLoad: ({ location }) => {
     if (typeof window !== "undefined") {
-      const authed = window.localStorage.getItem("laborapp-auth");
-      if (!authed && location.pathname !== "/login") {
+      if (!isAuthenticated() && location.pathname !== "/login") {
         throw redirect({ to: "/login" });
       }
     }

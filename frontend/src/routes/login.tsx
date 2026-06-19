@@ -1,9 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { HGLogo } from "@/components/brand/HGLogo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { loginRequest } from "@/lib/auth";
+import { ApiError } from "@/lib/api";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -18,16 +20,29 @@ export const Route = createFileRoute("/login")({
 function LoginPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
-  function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
     setLoading(true);
-    setTimeout(() => {
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("laborapp-auth", "1");
-      }
+    try {
+      await loginRequest(
+        emailRef.current?.value ?? "",
+        passwordRef.current?.value ?? "",
+      );
       navigate({ to: "/dashboard" });
-    }, 700);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const body = err.body as { error?: string };
+        setError(body?.error ?? "Credenciales incorrectas");
+      } else {
+        setError("No se pudo conectar con el servidor");
+      }
+      setLoading(false);
+    }
   }
 
   return (
@@ -55,9 +70,12 @@ function LoginPage() {
                 Correo corporativo
               </Label>
               <Input
+                ref={emailRef}
                 id="email"
                 type="email"
-                defaultValue="margarita.villamil@hurtadogandini.co"
+                defaultValue=""
+                autoComplete="email"
+                required
                 className="h-11 border-border-strong/60 bg-background/50"
               />
             </div>
@@ -66,12 +84,21 @@ function LoginPage() {
                 Contraseña
               </Label>
               <Input
+                ref={passwordRef}
                 id="password"
                 type="password"
-                defaultValue="••••••••••"
+                defaultValue=""
+                autoComplete="current-password"
+                required
                 className="h-11 border-border-strong/60 bg-background/50"
               />
             </div>
+
+            {error && (
+              <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </p>
+            )}
 
             <Button
               type="submit"
@@ -83,7 +110,7 @@ function LoginPage() {
           </form>
 
           <div className="mt-6 flex items-center justify-between text-xs text-muted-foreground">
-            <button className="hover:text-foreground">¿Olvidó su contraseña?</button>
+            <button type="button" className="hover:text-foreground">¿Olvidó su contraseña?</button>
             <span className="rounded-full border border-border-strong/60 px-2 py-0.5">SSO próximamente</span>
           </div>
         </div>

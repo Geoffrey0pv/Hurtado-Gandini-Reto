@@ -4,7 +4,8 @@ import { FileText, UploadCloud } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/common/StatusBadge";
-import { documentsSeed, type DocumentItem, sampleExtraction } from "@/lib/mock/data";
+import { useContratos } from "@/hooks/useContratos";
+import type { BackendContrato } from "@/lib/types";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
@@ -13,12 +14,24 @@ export const Route = createFileRoute("/_app/documentos")({
   component: DocumentosPage,
 });
 
-const filters = ["Todos", "Pendiente de extracción", "Pendiente de revisión", "Aprobado", "Rechazado"] as const;
+const STATUS_LABEL: Record<string, string> = {
+  PENDING: "Pendiente de extracción",
+  PROCESSING: "Procesando",
+  DONE: "Pendiente de revisión",
+  FAILED: "Error",
+};
+
+const filters = ["Todos", "Pendiente de extracción", "Procesando", "Pendiente de revisión", "Error"] as const;
 
 function DocumentosPage() {
+  const { data: contratos = [], isLoading } = useContratos();
   const [filter, setFilter] = useState<(typeof filters)[number]>("Todos");
-  const [open, setOpen] = useState<DocumentItem | null>(null);
-  const list = documentsSeed.filter((d) => filter === "Todos" || d.estado === filter);
+  const [open, setOpen] = useState<BackendContrato | null>(null);
+
+  const list = contratos.filter((d) => {
+    if (filter === "Todos") return true;
+    return STATUS_LABEL[d.status] === filter;
+  });
 
   return (
     <div>
@@ -47,15 +60,21 @@ function DocumentosPage() {
           ))}
         </div>
 
+        {isLoading ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">Cargando contratos…</p>
+        ) : list.length === 0 ? (
+          <div className="rounded-2xl border border-border bg-card px-6 py-16 text-center">
+            <FileText className="mx-auto mb-4 h-10 w-10 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">No hay documentos con ese filtro.</p>
+          </div>
+        ) : (
         <div className="overflow-hidden rounded-2xl border border-border bg-card">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <th className="px-5 py-3 font-medium">Documento</th>
                 <th className="px-5 py-3 font-medium">Tipo</th>
-                <th className="px-5 py-3 font-medium">Colaborador</th>
                 <th className="px-5 py-3 font-medium">Carga</th>
-                <th className="px-5 py-3 font-medium">Confianza IA</th>
                 <th className="px-5 py-3 font-medium">Estado</th>
               </tr>
             </thead>
@@ -63,27 +82,19 @@ function DocumentosPage() {
               {list.map((d) => (
                 <tr key={d.id} onClick={() => setOpen(d)} className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-surface-elevated/40">
                   <td className="px-5 py-4">
-                    <span className="inline-flex items-center gap-2 text-foreground"><FileText className="h-4 w-4 text-muted-foreground" />{d.nombre}</span>
+                    <span className="inline-flex items-center gap-2 text-foreground"><FileText className="h-4 w-4 text-muted-foreground" />{d.fileKey.split("/").pop()}</span>
                   </td>
-                  <td className="px-5 py-4 text-muted-foreground">{d.tipo}</td>
-                  <td className="px-5 py-4 text-foreground">{d.empleado}</td>
-                  <td className="px-5 py-4 text-muted-foreground">{d.fechaCarga}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{d.tipoContrato ?? "Contrato"}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{d.createdAt.slice(0, 10)}</td>
                   <td className="px-5 py-4">
-                    <div className="flex items-center gap-2">
-                      <span className="h-1.5 w-24 overflow-hidden rounded-full bg-surface-elevated">
-                        <span className="block h-full bg-primary" style={{ width: `${d.confianza}%` }} />
-                      </span>
-                      <span className="text-xs text-muted-foreground">{d.confianza}%</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <StatusBadge tone={d.estado === "Aprobado" ? "success" : d.estado === "Rechazado" ? "muted" : "warning"}>{d.estado}</StatusBadge>
+                    <StatusBadge tone={d.status === "DONE" ? "success" : d.status === "FAILED" ? "muted" : "warning"}>{STATUS_LABEL[d.status]}</StatusBadge>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       <Sheet open={!!open} onOpenChange={(o) => !o && setOpen(null)}>
@@ -91,19 +102,15 @@ function DocumentosPage() {
           <SheetTitle className="sr-only">Detalle de documento</SheetTitle>
           {open && (
             <div>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-primary">{open.tipo}</p>
-              <h2 className="mt-2 font-display text-2xl text-foreground">{open.nombre}</h2>
-              <p className="mt-1 text-xs text-muted-foreground">{open.empleado} · Carga {open.fechaCarga}</p>
-              <div className="mt-6 space-y-3">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">Campos extraídos por IA</p>
-                {sampleExtraction.slice(0, 6).map((f) => (
-                  <div key={f.key} className="rounded-xl border border-border bg-background/40 p-3 text-sm">
-                    <div className="flex items-center justify-between"><span className="text-muted-foreground">{f.label}</span><span className="text-xs text-muted-foreground">{f.confianza}%</span></div>
-                    <p className="mt-1 text-foreground">{f.value}</p>
-                    <p className="mt-1 text-xs italic text-muted-foreground">{f.fragmento}</p>
-                  </div>
-                ))}
-              </div>
+              <p className="text-[11px] uppercase tracking-[0.22em] text-primary">{open.tipoContrato ?? "Contrato"}</p>
+              <h2 className="mt-2 font-display text-2xl text-foreground">{open.fileKey.split("/").pop()}</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Cargado el {open.createdAt.slice(0, 10)}</p>
+              {open.extracted != null && (
+                <div className="mt-6">
+                  <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Datos extraídos</p>
+                  <pre className="overflow-auto rounded-xl border border-border bg-background/40 p-3 text-xs text-muted-foreground">{JSON.stringify(open.extracted, null, 2)}</pre>
+                </div>
+              )}
             </div>
           )}
         </SheetContent>

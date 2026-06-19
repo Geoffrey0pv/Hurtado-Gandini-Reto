@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { CalendarClock, CheckCircle2, ShieldAlert } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
-import { alertsSeed } from "@/lib/mock/data";
+import { useAlertas } from "@/hooks/useAlertas";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -11,14 +11,20 @@ export const Route = createFileRoute("/_app/alertas")({
   component: AlertasPage,
 });
 
-const summary = [
-  { label: "Críticas", count: alertsSeed.filter((a) => a.severidad === "alta").length, tone: "high" as const },
-  { label: "Medias", count: alertsSeed.filter((a) => a.severidad === "media").length, tone: "medium" as const },
-  { label: "Bajas", count: alertsSeed.filter((a) => a.severidad === "baja").length, tone: "low" as const },
-  { label: "Atendidas hoy", count: 2, tone: "low" as const },
-];
-
 function AlertasPage() {
+  const { data: alertas = [], isLoading } = useAlertas();
+
+  const criticas = alertas.filter((a) => a.severidad === "alta").length;
+  const medias = alertas.filter((a) => a.severidad === "media").length;
+  const bajas = alertas.filter((a) => a.severidad === "baja").length;
+
+  const summary = [
+    { label: "Críticas", count: criticas, tone: "high" as const },
+    { label: "Medias", count: medias, tone: "medium" as const },
+    { label: "Bajas", count: bajas, tone: "low" as const },
+    { label: "Total", count: alertas.length, tone: "low" as const },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -38,6 +44,14 @@ function AlertasPage() {
           ))}
         </div>
 
+        {isLoading ? (
+          <p className="text-center text-sm text-muted-foreground py-10">Cargando alertas…</p>
+        ) : alertas.length === 0 ? (
+          <div className="rounded-2xl border border-border bg-card px-6 py-16 text-center">
+            <CheckCircle2 className="mx-auto mb-4 h-10 w-10 text-risk-low" />
+            <p className="text-sm text-muted-foreground">No hay alertas activas. El compliance está al día.</p>
+          </div>
+        ) : (
         <div className="overflow-hidden rounded-2xl border border-border bg-card">
           <table className="min-w-full text-sm">
             <thead>
@@ -45,14 +59,14 @@ function AlertasPage() {
                 <th className="px-5 py-3 font-medium">Severidad</th>
                 <th className="px-5 py-3 font-medium">Motivo</th>
                 <th className="px-5 py-3 font-medium">Colaborador</th>
-                <th className="px-5 py-3 font-medium">Acción sugerida</th>
-                <th className="px-5 py-3 font-medium">Plazo legal</th>
+                <th className="px-5 py-3 font-medium">Tipo</th>
+                <th className="px-5 py-3 font-medium">Días restantes</th>
                 <th className="px-5 py-3" />
               </tr>
             </thead>
             <tbody>
-              {alertsSeed.map((a) => (
-                <tr key={a.id} className="border-b border-border/60 last:border-0 align-top">
+              {alertas.map((a, i) => (
+                <tr key={i} className="border-b border-border/60 last:border-0 align-top">
                   <td className="px-5 py-4">
                     <span className="inline-flex items-center gap-2 text-foreground">
                       <span className={cn("h-2 w-2 rounded-full",
@@ -62,19 +76,20 @@ function AlertasPage() {
                   </td>
                   <td className="px-5 py-4">
                     <p className="text-foreground">{a.motivo}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{a.detalle}</p>
-                    {a.norma && <StatusBadge tone="muted" className="mt-2"><ShieldAlert className="mr-1 h-3 w-3" />{a.norma}</StatusBadge>}
                   </td>
                   <td className="px-5 py-4">
-                    <Link to="/colaboradores/$id" params={{ id: a.empleadoId }} className="text-foreground hover:underline">{a.empleado}</Link>
+                    <Link to="/colaboradores/$id" params={{ id: a.colaboradorId }} className="text-foreground hover:underline">{a.nombre}</Link>
+                    <p className="text-xs text-muted-foreground">{a.cargo ?? ""}</p>
                   </td>
-                  <td className="px-5 py-4 text-muted-foreground">{a.accionSugerida}</td>
+                  <td className="px-5 py-4 text-muted-foreground">
+                    <StatusBadge tone="muted"><ShieldAlert className="mr-1 h-3 w-3" />{a.tipo}</StatusBadge>
+                  </td>
                   <td className="px-5 py-4">
-                    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><CalendarClock className="h-3.5 w-3.5" />{a.fechaLimite}</span>
+                    {a.plazo && <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><CalendarClock className="h-3.5 w-3.5" />{a.plazo} días</span>}
                   </td>
                   <td className="px-5 py-4 text-right">
                     <Button size="sm" variant="ghost" className="h-8 rounded-full text-xs text-muted-foreground hover:text-foreground">
-                      <CheckCircle2 className="mr-1 h-3.5 w-3.5" />Marcar atendida
+                      <CheckCircle2 className="mr-1 h-3.5 w-3.5" />Ver detalle
                     </Button>
                   </td>
                 </tr>
@@ -82,6 +97,7 @@ function AlertasPage() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 // src/app.ts — Construccion de la instancia Fastify (compartible por tests).
 import Fastify, { type FastifyInstance } from "fastify";
+import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import multipart from "@fastify/multipart";
 import { sql } from "drizzle-orm";
@@ -11,6 +12,14 @@ import { authRoutes } from "./modules/users/routes.js";
 import { organizationRoutes } from "./modules/organizations/routes.js";
 import { colaboradoresRoutes } from "./modules/colaboradores/routes.js";
 import { contratosRoutes } from "./modules/contratos/routes.js";
+import { areasRoutes } from "./modules/areas/routes.js";
+import { timesheetRoutes } from "./modules/timesheet/routes.js";
+import { documentosRoutes } from "./modules/documentos/routes.js";
+import { disciplinarioRoutes } from "./modules/disciplinario/routes.js";
+import { novedadesRoutes } from "./modules/novedades/routes.js";
+import { alertasRoutes } from "./modules/alertas/routes.js";
+import { auditLogsRoutes } from "./modules/audit-logs/routes.js";
+import { dashboardRoutes } from "./modules/dashboard/routes.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -20,6 +29,12 @@ export async function buildApp(): Promise<FastifyInstance> {
           ? { target: "pino-pretty", options: { translateTime: "HH:MM:ss", ignore: "pid,hostname" } }
           : undefined,
     },
+  });
+
+  // ── CORS ────────────────────────────────────────────────────────────
+  await app.register(cors, {
+    origin: [env.FRONTEND_URL, "http://localhost:4000", "http://localhost:3000"],
+    credentials: true,
   });
 
   // ── Subida de archivos (streaming) ──────────────────────────────────
@@ -67,6 +82,14 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(organizationRoutes, { prefix: "/organizations" });
   await app.register(colaboradoresRoutes, { prefix: "/colaboradores" });
   await app.register(contratosRoutes, { prefix: "/contratos" });
+  await app.register(areasRoutes, { prefix: "/areas" });
+  await app.register(timesheetRoutes, { prefix: "/timesheet" });
+  await app.register(documentosRoutes, { prefix: "/documentos" });
+  await app.register(disciplinarioRoutes, { prefix: "/disciplinario" });
+  await app.register(novedadesRoutes, { prefix: "/novedades" });
+  await app.register(alertasRoutes, { prefix: "/alertas" });
+  await app.register(auditLogsRoutes, { prefix: "/audit-logs" });
+  await app.register(dashboardRoutes, { prefix: "/dashboard" });
 
   return app;
 }

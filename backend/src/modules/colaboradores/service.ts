@@ -35,6 +35,17 @@ export async function createColaborador(orgId: string, data: CreateColaboradorIn
       cedula: data.cedula,
       fechaNacimiento: data.fechaNacimiento ?? null,
       cargo: data.cargo ?? null,
+      email: data.email ?? null,
+      telefono: data.telefono ?? null,
+      area: data.area ?? null,
+      jefeId: data.jefeId ?? null,
+      estado: data.estado ?? "activo",
+      estadoVinculacion: data.estadoVinculacion ?? "activo",
+      presencia: data.presencia ?? "en_oficina",
+      riesgo: data.riesgo ?? "bajo",
+      fueros: data.fueros ?? [],
+      arlNivel: data.arlNivel ?? 2,
+      origen: data.origen ?? "manual",
     })
     .returning();
   return row;
@@ -45,14 +56,26 @@ export async function updateColaborador(
   id: string,
   data: UpdateColaboradorInput,
 ) {
+  const patch: Record<string, unknown> = {};
+  if (data.nombre !== undefined) patch.nombre = data.nombre;
+  if (data.cedula !== undefined) patch.cedula = data.cedula;
+  if (data.fechaNacimiento !== undefined) patch.fechaNacimiento = data.fechaNacimiento;
+  if (data.cargo !== undefined) patch.cargo = data.cargo;
+  if (data.email !== undefined) patch.email = data.email;
+  if (data.telefono !== undefined) patch.telefono = data.telefono;
+  if (data.area !== undefined) patch.area = data.area;
+  if (data.jefeId !== undefined) patch.jefeId = data.jefeId;
+  if (data.estado !== undefined) patch.estado = data.estado;
+  if (data.estadoVinculacion !== undefined) patch.estadoVinculacion = data.estadoVinculacion;
+  if (data.presencia !== undefined) patch.presencia = data.presencia;
+  if (data.riesgo !== undefined) patch.riesgo = data.riesgo;
+  if (data.fueros !== undefined) patch.fueros = data.fueros;
+  if (data.arlNivel !== undefined) patch.arlNivel = data.arlNivel;
+  if (data.origen !== undefined) patch.origen = data.origen;
+
   const [row] = await db
     .update(colaboradores)
-    .set({
-      ...(data.nombre !== undefined ? { nombre: data.nombre } : {}),
-      ...(data.cedula !== undefined ? { cedula: data.cedula } : {}),
-      ...(data.fechaNacimiento !== undefined ? { fechaNacimiento: data.fechaNacimiento } : {}),
-      ...(data.cargo !== undefined ? { cargo: data.cargo } : {}),
-    })
+    .set(patch)
     .where(and(eq(colaboradores.organizationId, orgId), eq(colaboradores.id, id)))
     .returning();
   return row ?? null;

@@ -6,6 +6,7 @@ import { z } from "zod";
 const EnvSchema = z.object({
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url().default("redis://localhost:6379"),
+  FRONTEND_URL: z.string().url().default("http://localhost:4000"),
   MINIO_ENDPOINT: z.string().url().default("http://localhost:9000"),
   MINIO_ACCESS_KEY: z.string().default("minioadmin"),
   MINIO_SECRET_KEY: z.string().default("minioadmin"),

@@ -13,6 +13,20 @@ export const jobStatus = pgEnum("job_status", [
   "PENDING", "PROCESSING", "DONE", "FAILED",
 ]);
 
+export const estadoColaborador = pgEnum("estado_colaborador", ["activo", "inactivo"]);
+export const estadoVinculacion = pgEnum("estado_vinculacion", ["activo", "retirado"]);
+export const presenciaEnum = pgEnum("presencia", ["en_oficina", "vacaciones", "permiso", "incapacidad"]);
+export const riesgoEnum = pgEnum("riesgo", ["alto", "medio", "bajo"]);
+export const gravedadEnum = pgEnum("gravedad", ["leve", "grave", "gravisima"]);
+export const estadoExpediente = pgEnum("estado_expediente", ["abierto", "cerrado"]);
+export const modalidadEnum = pgEnum("modalidad", ["Presencial", "Virtual"]);
+export const tipoHoraEnum = pgEnum("tipo_hora", [
+  "extra_diurna", "extra_nocturna", "recargo_nocturno",
+  "recargo_dom_fest", "recargo_dom_fest_nocturno",
+  "extra_dom_fest_diurna", "extra_dom_fest_nocturna",
+  "pto", "permiso", "incapacidad", "ordinaria",
+]);
+
 // 1) Organizacion (empresa cliente / tenant)
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -32,6 +46,18 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// 5) Areas de la organizacion (para organigrama)
+export const areas = pgTable("areas", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  nombre: text("nombre").notNull(),
+  orden: integer("orden").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  uniqAreaOrg: uniqueIndex("uniq_area_org").on(t.organizationId, t.nombre),
+}));
+
 // 3) Colaborador (trabajador de la empresa)
 export const colaboradores = pgTable("colaboradores", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -39,11 +65,22 @@ export const colaboradores = pgTable("colaboradores", {
     .references(() => organizations.id, { onDelete: "cascade" }),
   nombre: text("nombre").notNull(),
   cedula: text("cedula").notNull(),
-  fechaNacimiento: date("fecha_nacimiento"),       // 'edad' se deriva de aqui
+  fechaNacimiento: date("fecha_nacimiento"),
   cargo: text("cargo"),
+  // campos ampliados para el UI
+  email: text("email"),
+  telefono: text("telefono"),
+  area: text("area"),
+  jefeId: uuid("jefe_id"),                        // FK auto-referenciada (nullable)
+  estado: estadoColaborador("estado").notNull().default("activo"),
+  estadoVinculacion: estadoVinculacion("estado_vinculacion").notNull().default("activo"),
+  presencia: presenciaEnum("presencia").notNull().default("en_oficina"),
+  riesgo: riesgoEnum("riesgo").notNull().default("bajo"),
+  fueros: jsonb("fueros").$type<string[]>().default([]),
+  arlNivel: integer("arl_nivel").default(2),      // 1-5
+  origen: text("origen").notNull().default("manual"), // manual | contrato
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
-  // un colaborador es unico por cedula DENTRO de su organizacion
   uniqCedulaOrg: uniqueIndex("uniq_cedula_org").on(t.organizationId, t.cedula),
 }));
 
@@ -101,10 +138,87 @@ export const auditLogs = pgTable("audit_logs", {
   id: uuid("id").defaultRandom().primaryKey(),
   organizationId: uuid("organization_id").notNull(),
   userId: uuid("user_id"),
-  action: text("action").notNull(),                 // p.ej. EXTRACT_CONTRACT, RAG_RISK
+  action: text("action").notNull(),
   entity: text("entity"),
   entityId: uuid("entity_id"),
-  aiModel: text("ai_model"),                         // modelo y version usados
-  payload: jsonb("payload"),                         // sugerencia IA + fuentes citadas
+  aiModel: text("ai_model"),
+  payload: jsonb("payload"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// 6) Timesheet: horas registradas por colaborador
+export const timesheetEntries = pgTable("timesheet_entries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  colaboradorId: uuid("colaborador_id").notNull()
+    .references(() => colaboradores.id, { onDelete: "cascade" }),
+  fecha: date("fecha").notNull(),
+  horas: numeric("horas", { precision: 4, scale: 1 }).notNull(),
+  tipo: tipoHoraEnum("tipo").notNull(),
+  notas: text("notas"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  tsOrgIdx: index("ts_org_idx").on(t.organizationId),
+  tsColabIdx: index("ts_colab_idx").on(t.colaboradorId),
+}));
+
+// 7) Documentos por slot (EPS, ARL, contrato firmado, etc.)
+export const documentosSlots = pgTable("documentos_slots", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  colaboradorId: uuid("colaborador_id").notNull()
+    .references(() => colaboradores.id, { onDelete: "cascade" }),
+  slotKey: text("slot_key").notNull(),              // contrato | afiliacion_eps | ...
+  fileKey: text("file_key").notNull(),              // objeto en MinIO
+  nombre: text("nombre").notNull(),
+  size: integer("size").notNull().default(0),
+  subidoEn: timestamp("subido_en").defaultNow().notNull(),
+}, (t) => ({
+  uniqSlotColab: uniqueIndex("uniq_slot_colab").on(t.colaboradorId, t.slotKey),
+  docOrgIdx: index("doc_org_idx").on(t.organizationId),
+}));
+
+// 8) Expedientes disciplinarios
+export const expedientes = pgTable("expedientes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  colaboradorId: uuid("colaborador_id").notNull()
+    .references(() => colaboradores.id, { onDelete: "cascade" }),
+  hechos: text("hechos").notNull(),
+  fechaHechos: date("fecha_hechos").notNull(),
+  gravedad: gravedadEnum("gravedad").notNull(),
+  normaVulnerada: text("norma_vulnerada"),
+  fechaDiligencia: date("fecha_diligencia"),
+  hora: text("hora"),
+  modalidad: modalidadEnum("modalidad").default("Presencial"),
+  lugar: text("lugar"),
+  asistentes: text("asistentes"),
+  ciudad: text("ciudad"),
+  estado: estadoExpediente("estado").notNull().default("abierto"),
+  cartaTexto: text("carta_texto"),
+  etapas: jsonb("etapas").$type<Record<string, boolean>>().default({}),
+  notificado: jsonb("notificado").$type<Array<{ canal: string; fecha: string }>>().default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  expOrgIdx: index("exp_org_idx").on(t.organizationId),
+}));
+
+// 9) Novedades de nomina
+export const novedades = pgTable("novedades", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  colaboradorId: uuid("colaborador_id").notNull()
+    .references(() => colaboradores.id, { onDelete: "cascade" }),
+  tipo: text("tipo").notNull(),
+  descripcion: text("descripcion"),
+  fecha: date("fecha").notNull(),
+  monto: numeric("monto", { precision: 14, scale: 2 }),
+  origen: text("origen").default("manual"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  novOrgIdx: index("nov_org_idx").on(t.organizationId),
+}));

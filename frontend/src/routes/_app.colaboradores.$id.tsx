@@ -5,22 +5,26 @@ import { AlertTriangle, Briefcase, CalendarDays, Check, ChevronLeft, ChevronRigh
 import { toast } from "sonner";
 import { ContextualSubnav } from "@/components/layout/ContextualSubnav";
 import { useEmployees } from "@/lib/store";
-import { useTimesheet, type TimesheetEntry } from "@/lib/timesheet-store";
 import { useLiquidaciones, calcularMora } from "@/lib/liquidacion-store";
-import { useNovedades, diasEntre, NOVEDAD_LABEL, NOVEDAD_TONE, type NovedadTipo } from "@/lib/novedades-store";
+import { diasEntre, NOVEDAD_LABEL, NOVEDAD_TONE, type NovedadTipo } from "@/lib/novedades-store";
 import { useObligaciones } from "@/lib/obligaciones-store";
-import { useDocumentos, DOC_SLOTS } from "@/lib/documentos-store";
-import { useDisciplinario, ETAPAS, GRAVEDAD_LABEL, GRAVEDAD_TONE, type Expediente, type EtapaKey, type Gravedad } from "@/lib/disciplinario-store";
+import { DOC_SLOTS } from "@/lib/documentos-store";
+import { ETAPAS, GRAVEDAD_LABEL, GRAVEDAD_TONE, type EtapaKey, type Gravedad } from "@/lib/disciplinario-store";
 import { obligacionesEnRango, proximasObligaciones, diasHabilesHasta, nivelAviso, avisosFrecuencia, type ObligacionEvento, type NivelAviso } from "@/lib/obligaciones";
+import { useTimesheetEntries, useAddTimesheetEntry, useDeleteTimesheetEntry } from "@/hooks/useTimesheet";
+import { useDocumentos as useDocumentosAPI, useUploadDocumento, useDeleteDocumento } from "@/hooks/useDocumentos";
+import { useExpedientes, useCreateExpediente, useUpdateExpediente, useDebidoProceso } from "@/hooks/useDisciplinario";
+import { useNovedades as useNovedadesAPI, useCreateNovedad, useDeleteNovedad } from "@/hooks/useNovedades";
+import { useAlertas } from "@/hooks/useAlertas";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { LegalWarningBanner } from "@/components/common/LegalWarningBanner";
 import {
-  alertsSeed, documentsSeed,
   antiguedad, aplicaDotacion, aportesMensuales, auxilioTransporte,
   calcularValorEntrada, cumplimientoDe, cumplimientoLabel, diasComerciales,
   FACTORES_HORA, jefeDisplay, liquidacion, presenciaLabel,
   riesgoDespido, valorHoraOrdinaria, type Employee, type TipoHora,
 } from "@/lib/mock/data";
+import type { BackendTimesheetEntry } from "@/lib/types";
 import { EmptyState } from "@/components/common/EmptyState";
 
 const tabSchema = z.object({
@@ -62,8 +66,8 @@ function ProfilePage() {
     );
   }
 
-  const empAlerts = alertsSeed.filter((a) => a.empleadoId === e.id);
-  const empDocs = documentsSeed.filter((d) => d.empleadoId === e.id);
+  const { data: allAlertas = [] } = useAlertas();
+  const empAlerts = allAlertas.filter((a) => a.colaboradorId === e.id);
   const empChecks = pendingChecks.filter((c) => c.empleadoId === e.id);
   const cumplimiento = cumplimientoDe(e.riesgo);
   const presenciaTone: Record<typeof e.presencia, "muted" | "warning" | "primary"> = {
@@ -176,10 +180,10 @@ function ProfilePage() {
                 <p className="text-sm text-muted-foreground">Sin alertas abiertas para este colaborador.</p>
               ) : (
                 <ul className="space-y-3">
-                  {empAlerts.map((a) => (
-                    <li key={a.id} className="rounded-xl border border-border bg-background/40 p-3">
+                  {empAlerts.map((a, i) => (
+                    <li key={i} className="rounded-xl border border-border bg-background/40 p-3">
                       <p className="text-sm text-foreground">{a.motivo}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{a.detalle}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{a.tipo}</p>
                     </li>
                   ))}
                 </ul>
@@ -208,12 +212,12 @@ function ProfilePage() {
           <ul className="space-y-3">
             {empAlerts.length === 0 ? (
               <EmptyState title="Sin alertas" description="Este colaborador no tiene alertas abiertas en este momento." />
-            ) : empAlerts.map((a) => (
-              <li key={a.id} className="rounded-2xl border border-border bg-card p-5">
+            ) : empAlerts.map((a, i) => (
+              <li key={i} className="rounded-2xl border border-border bg-card p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm text-foreground">{a.motivo}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{a.detalle}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{a.tipo}</p>
                   </div>
                   <StatusBadge tone={a.severidad === "alta" ? "warning" : "muted"}>{a.severidad}</StatusBadge>
                 </div>
@@ -376,12 +380,11 @@ function formatShortDate(iso: string) {
 // ─── Compliance panel (Ley 2101) ────────────────────────────────────────────
 
 function CompliancePanel({ empleadoId, salario }: { empleadoId: string; salario: number }) {
-  const { entries, addEntry, removeEntry } = useTimesheet();
-  const empEntries = entries.filter((x) => x.empleadoId === empleadoId);
+  const { data: entries = [] } = useTimesheetEntries(empleadoId);
   const ordinaria = valorHoraOrdinaria(salario);
-  const totales = empEntries.reduce((acc, x) => {
-    acc.horas += x.horas;
-    acc.valor += calcularValorEntrada(salario, x.horas, x.tipo);
+  const totales = entries.reduce((acc, x) => {
+    acc.horas += Number(x.horas);
+    acc.valor += calcularValorEntrada(salario, Number(x.horas), x.tipo as TipoHora);
     return acc;
   }, { horas: 0, valor: 0 });
 
@@ -539,7 +542,20 @@ function fmtRango(monday: Date) {
 }
 
 function TimesheetTab({ empleadoId, salario, jornada }: { empleadoId: string; salario: number; jornada: string }) {
-  const { entries, addEntry, removeEntry } = useTimesheet();
+  const { data: backendEntries = [] } = useTimesheetEntries(empleadoId);
+  const addEntryMut = useAddTimesheetEntry(empleadoId);
+  const deleteEntryMut = useDeleteTimesheetEntry(empleadoId);
+
+  // Adapt backend entries to the local TimesheetEntry shape
+  const entries: BackendTimesheetEntry[] = backendEntries;
+
+  function addEntry(e: { empleadoId: string; fecha: string; horas: number; tipo: TipoHora; notas?: string }) {
+    addEntryMut.mutate({ fecha: e.fecha, horas: e.horas, tipo: e.tipo, notas: e.notas });
+    return { ok: true } as { ok: true };
+  }
+  function removeEntry(id: string) {
+    deleteEntryMut.mutate(id);
+  }
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()));
 
   const weekDates = useMemo(() => {
@@ -554,27 +570,27 @@ function TimesheetTab({ empleadoId, salario, jornada }: { empleadoId: string; sa
   const horasSemanales = parseJornadaSemanal(jornada);
   const ordinariaPorDia = horasSemanales / 5; // L–V
 
-  // Entradas registradas en esta semana
+  // Entradas registradas en esta semana (backend entries are already filtered by colaboradorId)
   const semana = useMemo(
-    () => entries.filter((x) => x.empleadoId === empleadoId && weekDateStrings.includes(x.fecha)),
-    [entries, empleadoId, weekDateStrings.join(",")],
+    () => entries.filter((x) => weekDateStrings.includes(x.fecha)),
+    [entries, weekDateStrings.join(",")],
   );
 
   // Tipos visibles en la grilla: ordinaria siempre + cualquier tipo con entradas esta semana
-  const tiposPresentes = Array.from(new Set(semana.map((x) => x.tipo))) as TipoHora[];
+  const tiposPresentes = Array.from(new Set(semana.map((x) => x.tipo as TipoHora))) as TipoHora[];
   const tiposGrilla = ["ordinaria" as TipoHora, ...tiposPresentes.filter((t) => t !== "ordinaria")];
 
   function horasCell(tipo: TipoHora, fecha: string): number {
     if (tipo === "ordinaria") {
       const idx = weekDateStrings.indexOf(fecha);
       const override = semana.find((x) => x.tipo === "ordinaria" && x.fecha === fecha);
-      if (override) return override.horas;
+      if (override) return Number(override.horas);
       // distribución automática L–V
       return idx >= 0 && idx <= 4 ? ordinariaPorDia : 0;
     }
     return semana
       .filter((x) => x.tipo === tipo && x.fecha === fecha)
-      .reduce((s, x) => s + x.horas, 0);
+      .reduce((s, x) => s + Number(x.horas), 0);
   }
 
   const totalSemana = tiposGrilla.reduce(
@@ -582,8 +598,8 @@ function TimesheetTab({ empleadoId, salario, jornada }: { empleadoId: string; sa
     0,
   );
   const totalOrdinaria = weekDateStrings.reduce((s, f) => s + horasCell("ordinaria", f), 0);
-  const totalExtras = semana.filter((x) => x.tipo.startsWith("extra_") || x.tipo.startsWith("recargo")).reduce((s, x) => s + x.horas, 0);
-  const totalPto = semana.filter((x) => ["pto", "permiso", "incapacidad"].includes(x.tipo)).reduce((s, x) => s + x.horas, 0);
+  const totalExtras = semana.filter((x) => x.tipo.startsWith("extra_") || x.tipo.startsWith("recargo")).reduce((s, x) => s + Number(x.horas), 0);
+  const totalPto = semana.filter((x) => ["pto", "permiso", "incapacidad"].includes(x.tipo)).reduce((s, x) => s + Number(x.horas), 0);
 
   function shiftWeek(delta: number) {
     const next = new Date(weekStart);
@@ -994,10 +1010,29 @@ function descargarCartaDoc(carta: string, filename: string) {
 }
 
 function DisciplinarioTab({ empleado: e }: { empleado: Employee }) {
-  const { add, forEmployee, toggleEtapa, setEstado, registrarNotificacion, remove } = useDisciplinario();
-  const expedientes = forEmployee(e.id);
+  const { data: expedientes = [] } = useExpedientes(e.id);
+  const createExpediente = useCreateExpediente();
+  const updateExpediente = useUpdateExpediente();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = expedientes.find((x) => x.id === selectedId) ?? expedientes[0] ?? null;
+
+  function toggleEtapa(id: string, key: string, val: boolean) {
+    const exp = expedientes.find((x) => x.id === id);
+    if (!exp) return;
+    const etapas = { ...(exp.etapas ?? {}), [key]: val };
+    updateExpediente.mutate({ id, data: { etapas } });
+  }
+  function setEstado(id: string, estado: "abierto" | "cerrado") {
+    updateExpediente.mutate({ id, data: { estado } });
+  }
+  function registrarNotificacion(id: string, canal: "email" | "telefono") {
+    const exp = expedientes.find((x) => x.id === id);
+    const notificado = [...(exp?.notificado ?? []), { canal, fecha: new Date().toISOString().slice(0, 10) }];
+    updateExpediente.mutate({ id, data: { notificado } });
+  }
+  function remove(_id: string) {
+    // delete not wired yet
+  }
 
   // Form state
   const hoy = new Date().toISOString().slice(0, 10);
@@ -1018,15 +1053,19 @@ function DisciplinarioTab({ empleado: e }: { empleado: Employee }) {
     fechaHechos, hechos, gravedad, norma, fechaDiligencia, hora, modalidad, lugar, asistentes,
   }), [ciudad, hoy, e, fechaHechos, hechos, gravedad, norma, fechaDiligencia, hora, modalidad, lugar, asistentes]);
 
-  const generar = () => {
+  const generar = async () => {
     if (!hechos.trim()) { toast.error("Describe los hechos antes de generar la carta."); return; }
-    const item = add({
-      empleadoId: e.id, hechos, fechaHechos, gravedad, normaVulnerada: norma,
-      fechaDiligencia, hora, modalidad, lugar, asistentes, ciudad,
-      cartaTexto: cartaPreview,
-    });
-    setSelectedId(item.id);
-    toast.success("Expediente creado y carta registrada");
+    try {
+      const item = await createExpediente.mutateAsync({
+        colaboradorId: e.id, hechos, fechaHechos, gravedad, normaVulnerada: norma,
+        fechaDiligencia, hora, modalidad, lugar, asistentes, ciudad,
+        cartaTexto: cartaPreview,
+      });
+      setSelectedId(item.id);
+      toast.success("Expediente creado y carta registrada");
+    } catch {
+      toast.error("Error al crear el expediente");
+    }
   };
 
   const reincidencia = expedientes.length;
@@ -1589,9 +1628,11 @@ function diffDays(a: Date, b: Date) {
 // obligacionesEnRango ahora vive en @/lib/obligaciones (compartido con la tab Obligaciones).
 
 function CalendarioTab({ empleado: e }: { empleado: Employee }) {
-  const { novedades, add, remove, forEmployee } = useNovedades();
+  const { data: novedades = [] } = useNovedadesAPI(e.id);
+  const createNovedad = useCreateNovedad(e.id);
+  const deleteNovedad = useDeleteNovedad(e.id);
   const { isDone, toggle: toggleObl } = useObligaciones();
-  const empNov = forEmployee(e.id);
+  const empNov = novedades;
   const today = useMemo(() => new Date(), []);
   const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selected, setSelected] = useState<string>(isoOf(today.getFullYear(), today.getMonth(), today.getDate()));
@@ -1601,7 +1642,7 @@ function CalendarioTab({ empleado: e }: { empleado: Employee }) {
   const vacCausadas = Math.floor((diasAntig / 360) * 15);
   const vacUsadas = empNov
     .filter((n) => n.tipo === "vacaciones")
-    .reduce((s, n) => s + diasEntre(n.desde, n.hasta), 0);
+    .reduce((s, _n) => s + 0, 0); // novedades no tienen rango de fechas todavía
   const vacDisponibles = Math.max(0, vacCausadas - vacUsadas);
 
   // Eventos del mes visible
@@ -1620,25 +1661,17 @@ function CalendarioTab({ empleado: e }: { empleado: Employee }) {
   }, [e, monthStart.getTime(), monthEnd.getTime()]);
 
   const novedadEventos: CalEvent[] = empNov.flatMap((n) => {
-    const ini = parseISO(n.desde);
-    const fin = parseISO(n.hasta);
-    if (fin < monthStart || ini > monthEnd) return [];
-    const ev: CalEvent[] = [];
-    const start = ini < monthStart ? monthStart : ini;
-    const end = fin > monthEnd ? monthEnd : fin;
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      ev.push({
-        fecha: isoOf(d.getFullYear(), d.getMonth(), d.getDate()),
-        fechaFin: n.hasta,
-        tipo: "novedad",
-        subtipo: n.tipo,
-        label: NOVEDAD_LABEL[n.tipo],
-        detalle: n.nota,
-        tone: NOVEDAD_TONE[n.tipo],
-        novedadId: n.id,
-      });
-    }
-    return ev;
+    const ini = parseISO(n.fecha);
+    if (ini < monthStart || ini > monthEnd) return [];
+    return [{
+      fecha: isoOf(ini.getFullYear(), ini.getMonth(), ini.getDate()),
+      tipo: "novedad" as const,
+      subtipo: n.tipo as NovedadTipo,
+      label: (NOVEDAD_LABEL as Record<string, string>)[n.tipo] ?? n.tipo,
+      detalle: n.descripcion ?? undefined,
+      tone: ((NOVEDAD_TONE as Record<string, "muted" | "warning" | "primary">)[n.tipo] ?? "muted") as CalEvent["tone"],
+      novedadId: n.id,
+    }];
   });
   const eventos: CalEvent[] = [...obligacionesEv, ...novedadEventos];
 
@@ -1653,7 +1686,7 @@ function CalendarioTab({ empleado: e }: { empleado: Employee }) {
       .filter((o) => o.dist >= 0)
       .sort((a, b) => a.dist - b.dist)
       .slice(0, 6);
-  }, [e, today.getTime(), horizonte.getTime(), novedades]);
+  }, [e, today.getTime(), horizonte.getTime()]);
 
   // Grilla del calendario
   const firstDow = (monthStart.getDay() + 6) % 7; // lun=0
@@ -1988,10 +2021,14 @@ function toneBorderClass(t: CalEvent["tone"]) {
 // Documentos tab — repositorio legal, comprobantes y bitácora
 // ============================================================
 function DocumentosTab({ empleado: e }: { empleado: Employee }) {
-  const { getFile, setFile, removeFile, getNote, setNote } = useDocumentos();
-  const { forEmployee } = useNovedades();
-  const comprobantes = forEmployee(e.id).filter((n) => n.documento);
-  const note = getNote(e.id);
+  const { data: apiDocs = [] } = useDocumentosAPI(e.id);
+  const uploadDoc = useUploadDocumento(e.id);
+  const deleteDoc = useDeleteDocumento(e.id);
+  const { data: novedades = [] } = useNovedadesAPI(e.id);
+  const [note, setNoteLocal] = useState("");
+
+  const getFile = (empId: string, slotKey: string) =>
+    apiDocs.find((d) => d.slotKey === slotKey);
   const completos = DOC_SLOTS.filter((s) => getFile(e.id, s.key)).length;
 
   const onPick = (slot: typeof DOC_SLOTS[number]) => {
@@ -2001,8 +2038,8 @@ function DocumentosTab({ empleado: e }: { empleado: Employee }) {
     input.onchange = () => {
       const f = input.files?.[0];
       if (!f) return;
-      setFile(e.id, slot.key, { nombre: f.name, size: f.size, subidoEn: new Date().toISOString() });
-      toast.success(`${slot.label} cargado`);
+      uploadDoc.mutate({ slotKey: slot.key, file: f });
+      toast.success(`${slot.label} en carga…`);
     };
     input.click();
   };
@@ -2044,7 +2081,7 @@ function DocumentosTab({ empleado: e }: { empleado: Employee }) {
                 </button>
                 {file && (
                   <button
-                    onClick={() => { removeFile(e.id, slot.key); toast.message("Documento eliminado"); }}
+                    onClick={() => { deleteDoc.mutate(file.id); toast.message("Documento eliminado"); }}
                     className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground hover:bg-surface-elevated hover:text-foreground"
                     aria-label="Eliminar documento"
                   >
@@ -2063,20 +2100,20 @@ function DocumentosTab({ empleado: e }: { empleado: Employee }) {
             <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Comprobantes de novedades</p>
             <p className="mt-1 text-xs text-muted-foreground">Soportes cargados desde la pestaña Calendario.</p>
           </header>
-          {comprobantes.length === 0 ? (
-            <p className="px-5 py-8 text-center text-xs text-muted-foreground">Sin comprobantes.</p>
+          {novedades.length === 0 ? (
+            <p className="px-5 py-8 text-center text-xs text-muted-foreground">Sin novedades registradas.</p>
           ) : (
             <ul className="divide-y divide-border">
-              {comprobantes.map((n) => (
+              {novedades.map((n) => (
                 <li key={n.id} className="flex items-center gap-3 px-5 py-3">
                   <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm text-foreground">{n.documento?.nombre}</p>
+                    <p className="truncate text-sm text-foreground">{n.descripcion ?? n.tipo}</p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {NOVEDAD_LABEL[n.tipo]} · {formatDate(n.desde)} → {formatDate(n.hasta)}
+                      {n.tipo} · {formatDate(n.fecha)}
                     </p>
                   </div>
-                  <StatusBadge tone={NOVEDAD_TONE[n.tipo]}>{NOVEDAD_LABEL[n.tipo]}</StatusBadge>
+                  <StatusBadge tone="muted">{n.tipo}</StatusBadge>
                 </li>
               ))}
             </ul>
@@ -2087,14 +2124,14 @@ function DocumentosTab({ empleado: e }: { empleado: Employee }) {
           <header className="flex items-center justify-between border-b border-border px-5 py-4">
             <div>
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Bitácora del trabajador</p>
-              <p className="mt-1 text-xs text-muted-foreground">Notas internas del perfil. Se guardan automáticamente.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Notas internas del perfil.</p>
             </div>
             {note.trim().length > 0 && <span className="text-[10px] text-muted-foreground">{note.length} car.</span>}
           </header>
           <div className="p-4">
             <textarea
               value={note}
-              onChange={(ev) => setNote(e.id, ev.target.value)}
+              onChange={(ev) => setNoteLocal(ev.target.value)}
               placeholder="Escribe observaciones, acuerdos verbales, llamados de atención informales, recordatorios…"
               className="min-h-[220px] w-full resize-y rounded-xl border border-border bg-background/40 px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-primary focus:outline-none"
             />

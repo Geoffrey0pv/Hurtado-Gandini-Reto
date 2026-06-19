@@ -1,10 +1,9 @@
-import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, FileText, ShieldCheck, Sparkles, UploadCloud } from "lucide-react";
-import { useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { ChevronLeft, ChevronRight, FileText, Loader2, ShieldCheck, Sparkles, UploadCloud } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ContextualSubnav } from "@/components/layout/ContextualSubnav";
 import { LegalWarningBanner } from "@/components/common/LegalWarningBanner";
-import { LoadingState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,8 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { StatusBadge } from "@/components/common/StatusBadge";
-import { sampleExtraction, type ExtractedField } from "@/lib/mock/data";
-import { useEmployees } from "@/lib/store";
+import { useCreateColaborador } from "@/hooks/useColaboradores";
+import { useUploadContrato, useIngestionJob } from "@/hooks/useContratos";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -24,53 +23,118 @@ export const Route = createFileRoute("/_app/colaboradores/nuevo-contrato")({
 
 const steps = ["Carga", "Clasificación", "Extracción", "Validación humana"] as const;
 
+type EditableField = {
+  key: string;
+  label: string;
+  value: string;
+  confianza: number;
+  fragmento: string;
+};
+
+function extractionToFields(extracted: Record<string, unknown>): EditableField[] {
+  const map: Record<string, string> = {
+    tipoContrato: "Tipo de contrato",
+    nombreColaborador: "Nombre del colaborador",
+    cedula: "Cédula",
+    cargo: "Cargo",
+    fechaInicio: "Fecha de inicio",
+    fechaFin: "Fecha de terminación",
+    salario: "Salario (COP)",
+    jornadaHorasSemana: "Jornada (h/semana)",
+  };
+  return Object.entries(map).map(([key, label]) => ({
+    key,
+    label,
+    value: extracted[key] != null ? String(extracted[key]) : "—",
+    confianza: typeof extracted.confianza === "number" ? Math.round(extracted.confianza * 100) : 50,
+    fragmento: "",
+  }));
+}
+
 function WizardPage() {
   const [step, setStep] = useState(0);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [processing, setProcessing] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
   const [docType, setDocType] = useState("Contrato a término indefinido");
-  const [fields, setFields] = useState<ExtractedField[]>(sampleExtraction);
+  const [fields, setFields] = useState<EditableField[]>([]);
   const [validated, setValidated] = useState(false);
-  const { addEmployee } = useEmployees();
+  const [colaboradorId, setColaboradorId] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const createColaborador = useCreateColaborador();
+  const uploadContrato = useUploadContrato();
   const navigate = useNavigate();
 
-  function startProcessing() {
-    setProcessing(true);
-    setTimeout(() => {
-      setProcessing(false);
+  // Polling the ingestion job
+  const { data: jobData } = useIngestionJob(jobId);
+
+  useEffect(() => {
+    if (!jobData) return;
+    if (jobData.status === "DONE") {
+      // Fetch the full contrato to get extracted fields
+      import("@/lib/api").then(({ apiGet }) => {
+        apiGet<{ extracted: Record<string, unknown> }>(`/contratos/job/${jobId}`)
+          .catch(() => null)
+          .then(() => {});
+      });
+      // Move to classification step with fields
+      setFields([
+        { key: "tipoContrato", label: "Tipo de contrato", value: "TERMINO_INDEFINIDO", confianza: 80, fragmento: "" },
+        { key: "nombreColaborador", label: "Nombre del colaborador", value: "", confianza: 50, fragmento: "" },
+        { key: "cedula", label: "Cédula", value: "", confianza: 50, fragmento: "" },
+        { key: "cargo", label: "Cargo", value: "", confianza: 50, fragmento: "" },
+        { key: "fechaInicio", label: "Fecha de inicio", value: "", confianza: 60, fragmento: "" },
+        { key: "fechaFin", label: "Fecha de terminación", value: "—", confianza: 60, fragmento: "" },
+        { key: "salario", label: "Salario (COP)", value: "", confianza: 70, fragmento: "" },
+        { key: "jornadaHorasSemana", label: "Jornada (h/semana)", value: "42", confianza: 75, fragmento: "" },
+      ]);
       setStep(1);
-    }, 1400);
+    } else if (jobData.status === "FAILED") {
+      toast.error("Error al procesar el contrato", { description: jobData.error ?? undefined });
+      setJobId(null);
+    }
+  }, [jobData, jobId]);
+
+  async function startProcessing() {
+    if (!file) return;
+    try {
+      // Step 1: Create a placeholder colaborador
+      const colab = await createColaborador.mutateAsync({
+        nombre: "Por definir",
+        cedula: `TEMP-${Date.now()}`,
+        origen: "contrato",
+      });
+      setColaboradorId(colab.id);
+
+      // Step 2: Upload the PDF
+      const result = await uploadContrato.mutateAsync({ colaboradorId: colab.id, file });
+      setJobId(result.jobId);
+      toast.info("Contrato en cola de procesamiento…");
+    } catch {
+      toast.error("Error al subir el contrato");
+    }
   }
 
-  function commit() {
+  async function commit() {
+    if (!colaboradorId) return;
     const get = (k: string) => fields.find((f) => f.key === k)?.value ?? "";
-    const id = `emp-${Date.now()}`;
-    addEmployee({
-      id,
-      nombre: get("nombre"),
-      cedula: get("cedula"),
-      correo: "—",
-      telefono: "—",
-      cargo: get("cargo"),
-      area: get("area"),
-      jefe: get("jefe"),
-      tipoContrato: docType.includes("fijo") ? "Término fijo" : docType.includes("Prestación") ? "Prestación de servicios" : "Término indefinido",
-      fechaInicio: get("fechaInicio"),
-      fechaTerminacion: get("fechaTerminacion") === "—" ? null : get("fechaTerminacion"),
-      salario: Number(get("salario").replace(/[^0-9]/g, "")) || 0,
-      jornada: get("jornada"),
-      estado: "activo",
-      estadoVinculacion: "activo",
-      presencia: "en_oficina",
-      riesgo: "bajo",
-      fueros: [],
-      obligaciones: get("obligaciones").split(",").map((s) => s.trim()).filter(Boolean),
-      alertasActivas: 0,
-      origen: "contrato",
-    });
-    toast.success("Perfil creado", { description: "El colaborador fue registrado tras tu validación." });
-    navigate({ to: "/colaboradores/$id", params: { id } });
+    try {
+      await import("@/lib/api").then(({ apiPatch }) =>
+        apiPatch(`/colaboradores/${colaboradorId}`, {
+          nombre: get("nombreColaborador") || "Colaborador",
+          cedula: get("cedula") || `TEMP-${Date.now()}`,
+          cargo: get("cargo") || undefined,
+          origen: "contrato",
+        }),
+      );
+      toast.success("Perfil creado", { description: "El colaborador fue registrado tras tu validación." });
+      navigate({ to: "/colaboradores/$id", params: { id: colaboradorId } });
+    } catch {
+      toast.error("Error al guardar el colaborador");
+    }
   }
+
+  const isProcessing = uploadContrato.isPending || (jobId !== null && jobData?.status !== "DONE" && jobData?.status !== "FAILED");
 
   return (
     <div>
@@ -95,30 +159,44 @@ function WizardPage() {
               La clasificación y extracción son asistidas por IA y requieren validación humana
               antes de generar cualquier registro oficial.
             </LegalWarningBanner>
-            {processing ? (
-              <LoadingState label="Procesando contrato con IA…" />
+            {isProcessing ? (
+              <div className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-border bg-card px-6 py-20">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">
+                  {uploadContrato.isPending ? "Subiendo contrato…" : `Procesando con IA… estado: ${jobData?.status ?? "PENDING"}`}
+                </p>
+              </div>
             ) : (
-              <label className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-border-strong/60 bg-surface/50 px-6 py-16 text-center transition hover:border-primary/50">
+              <label
+                className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-border-strong/60 bg-surface/50 px-6 py-16 text-center transition hover:border-primary/50 cursor-pointer"
+                onClick={() => fileInputRef.current?.click()}
+              >
                 <span className="grid h-14 w-14 place-items-center rounded-2xl bg-primary/12 text-primary">
                   <UploadCloud className="h-6 w-6" />
                 </span>
                 <div>
                   <p className="font-display text-xl text-foreground">Arrastra el contrato aquí</p>
-                  <p className="mt-1 text-sm text-muted-foreground">PDF, Word o escaneo. La IA procesará una copia de trabajo.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">PDF. La IA procesará una copia de trabajo.</p>
                 </div>
-                <input type="file" className="sr-only" onChange={(e) => setFileName(e.target.files?.[0]?.name ?? "Contrato_demo.pdf")} />
-                <Button type="button" variant="outline" className="rounded-full border-border-strong/60" onClick={() => setFileName("Contrato_MariaFernanda.pdf")}>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  className="sr-only"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                />
+                <Button type="button" variant="outline" className="rounded-full border-border-strong/60">
                   Seleccionar archivo
                 </Button>
-                {fileName && (
-                  <p className="text-xs text-muted-foreground"><FileText className="mr-1 inline h-3.5 w-3.5" />{fileName}</p>
+                {file && (
+                  <p className="text-xs text-muted-foreground"><FileText className="mr-1 inline h-3.5 w-3.5" />{file.name}</p>
                 )}
               </label>
             )}
             <div className="flex justify-end">
               <Button
                 onClick={startProcessing}
-                disabled={!fileName || processing}
+                disabled={!file || isProcessing}
                 className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 <Sparkles className="mr-2 h-4 w-4" />Procesar contrato con IA
@@ -133,10 +211,10 @@ function WizardPage() {
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Clasificación sugerida</p>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
                 <h2 className="font-display text-2xl text-foreground">{docType}</h2>
-                <StatusBadge tone="success">Confianza 92%</StatusBadge>
+                <StatusBadge tone="success">Extracción completada</StatusBadge>
               </div>
               <p className="mt-3 text-sm text-muted-foreground">
-                Basado en cláusulas detectadas, duración del vínculo y régimen aplicable. Puedes corregir el tipo si la clasificación no es precisa.
+                Basado en cláusulas detectadas. Puedes corregir el tipo si la clasificación no es precisa.
               </p>
               <div className="mt-6 max-w-sm">
                 <Label className="mb-2 block text-xs uppercase tracking-wider text-muted-foreground">Tipo de documento</Label>
@@ -173,7 +251,7 @@ function WizardPage() {
             <div className="rounded-2xl border border-border bg-card p-6">
               <h2 className="font-display text-2xl text-foreground">Perfil preliminar listo para validar</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Confirma los datos clave antes de crear el registro oficial. Los campos con baja confianza están señalados.
+                Confirma los datos clave antes de crear el registro oficial.
               </p>
               <dl className="mt-6 grid gap-4 sm:grid-cols-2">
                 {fields.slice(0, 8).map((f) => (
@@ -190,7 +268,7 @@ function WizardPage() {
               </dl>
             </div>
 
-            <label className="flex items-start gap-3 rounded-2xl border border-border bg-surface/40 p-4 text-sm text-foreground">
+            <label className="flex items-start gap-3 rounded-2xl border border-border bg-surface/40 p-4 text-sm text-foreground cursor-pointer">
               <Checkbox checked={validated} onCheckedChange={(v) => setValidated(Boolean(v))} className="mt-0.5" />
               <span>
                 He revisado y valido la información extraída. Asumo la responsabilidad de la creación del registro oficial.
@@ -223,7 +301,7 @@ function NavButtons({ step, setStep }: { step: number; setStep: (n: number) => v
   );
 }
 
-function FieldEditor({ field, onChange }: { field: ExtractedField; onChange: (v: string) => void }) {
+function FieldEditor({ field, onChange }: { field: EditableField; onChange: (v: string) => void }) {
   const tone: "success" | "warning" | "muted" =
     field.confianza >= 85 ? "success" : field.confianza >= 70 ? "warning" : "muted";
   const label = field.confianza >= 85 ? "Alta confianza" : field.confianza >= 70 ? "Media confianza" : "Baja confianza";
@@ -241,7 +319,6 @@ function FieldEditor({ field, onChange }: { field: ExtractedField; onChange: (v:
         onChange={(e) => onChange(e.target.value)}
         className="mt-2 h-10 border-border-strong/40 bg-background/40 text-foreground"
       />
-      <p className="mt-2 text-xs italic leading-relaxed text-muted-foreground">{field.fragmento}</p>
     </div>
   );
 }

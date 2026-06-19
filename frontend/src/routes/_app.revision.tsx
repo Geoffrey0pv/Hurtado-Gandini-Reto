@@ -5,7 +5,8 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { LegalWarningBanner } from "@/components/common/LegalWarningBanner";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { reviewSeed, type ReviewItem } from "@/lib/mock/data";
+import { useContratos } from "@/hooks/useContratos";
+import type { BackendContrato } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -15,7 +16,9 @@ export const Route = createFileRoute("/_app/revision")({
 });
 
 function RevisionPage() {
-  const [selected, setSelected] = useState<ReviewItem>(reviewSeed[0]);
+  const { data: contratos = [], isLoading } = useContratos();
+  const enRevision = contratos.filter((c) => c.status === "DONE" && c.extracted != null);
+  const [selected, setSelected] = useState<BackendContrato | null>(null);
 
   return (
     <div>
@@ -31,56 +34,57 @@ function RevisionPage() {
           firmada y trazable en auditoría.
         </LegalWarningBanner>
 
+        {isLoading ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">Cargando contratos…</p>
+        ) : enRevision.length === 0 ? (
+          <div className="rounded-2xl border border-border bg-card px-6 py-16 text-center">
+            <Check className="mx-auto mb-4 h-10 w-10 text-risk-low" />
+            <p className="text-sm text-muted-foreground">No hay contratos pendientes de revisión.</p>
+          </div>
+        ) : (
         <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
           <aside className="space-y-2">
-            {reviewSeed.map((r) => (
+            {enRevision.map((r) => (
               <button
                 key={r.id}
                 onClick={() => setSelected(r)}
                 className={cn(
                   "block w-full rounded-2xl border bg-card p-4 text-left transition",
-                  selected.id === r.id ? "border-primary/60 bg-surface-elevated" : "border-border hover:border-border-strong",
+                  selected?.id === r.id ? "border-primary/60 bg-surface-elevated" : "border-border hover:border-border-strong",
                 )}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{r.tipo}</p>
-                    <p className="mt-1 truncate text-sm text-foreground">{r.empleado}</p>
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{r.tipoContrato ?? "Contrato"}</p>
+                    <p className="mt-1 truncate text-sm text-foreground">{r.fileKey.split("/").pop()}</p>
                   </div>
-                  <StatusBadge tone={r.estado === "En cola" ? "warning" : "primary"}>{r.estado}</StatusBadge>
+                  <StatusBadge tone="primary">{r.status}</StatusBadge>
                 </div>
                 <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{r.fecha}</span>
-                  <span>Confianza {r.confianza}%</span>
+                  <span>{r.createdAt.slice(0, 10)}</span>
                 </div>
               </button>
             ))}
           </aside>
 
+          {selected ? (
           <section className="rounded-2xl border border-border bg-card">
             <header className="border-b border-border p-6">
-              <p className="text-[11px] uppercase tracking-wider text-primary">{selected.tipo}</p>
-              <h2 className="mt-1 font-display text-2xl text-foreground">{selected.empleado}</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Generado el {selected.fecha} · Confianza {selected.confianza}%</p>
+              <p className="text-[11px] uppercase tracking-wider text-primary">{selected.tipoContrato ?? "Contrato"}</p>
+              <h2 className="mt-1 font-display text-2xl text-foreground">Revisión de extracción</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Creado el {selected.createdAt.slice(0, 10)}</p>
             </header>
 
             <div className="grid gap-4 p-6 md:grid-cols-2">
-              <Pane title="Sugerencia IA" tone="muted">
-                <p className="text-sm leading-relaxed text-foreground">{selected.resumenIA}</p>
-                <div className="mt-4">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Fuentes citadas</p>
-                  <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-                    {selected.fuentes.map((f) => (<li key={f}>· {f}</li>))}
-                  </ul>
-                </div>
+              <Pane title="Datos extraídos por IA" tone="muted">
+                <pre className="overflow-auto text-xs text-muted-foreground">{JSON.stringify(selected.extracted, null, 2)}</pre>
               </Pane>
               <Pane title="Versión aprobada por abogado" tone="primary">
                 <p className="text-sm leading-relaxed text-foreground">
-                  Aquí el abogado revisa, edita y firma la versión final. La aprobación es lo único
-                  que produce efectos jurídicos sobre el caso.
+                  Revisa los datos extraídos y aprueba para crear o actualizar el perfil del colaborador.
                 </p>
                 <div className="mt-4 rounded-xl border border-dashed border-border-strong/60 bg-background/40 p-3 text-xs text-muted-foreground">
-                  Pendiente de aprobación por M. Villamil
+                  Pendiente de aprobación jurídica
                 </div>
               </Pane>
             </div>
@@ -97,7 +101,13 @@ function RevisionPage() {
               </Button>
             </footer>
           </section>
+          ) : (
+            <section className="rounded-2xl border border-border bg-card flex items-center justify-center p-10 text-sm text-muted-foreground">
+              Selecciona un contrato para revisar
+            </section>
+          )}
         </div>
+        )}
       </div>
     </div>
   );

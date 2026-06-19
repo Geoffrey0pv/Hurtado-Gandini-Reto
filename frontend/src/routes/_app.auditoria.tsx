@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { auditSeed, type AuditEvent } from "@/lib/mock/data";
+import { useAuditoria } from "@/hooks/useAuditoria";
+import type { BackendAuditLog } from "@/lib/types";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
@@ -11,7 +12,9 @@ export const Route = createFileRoute("/_app/auditoria")({
 });
 
 function AuditoriaPage() {
-  const [open, setOpen] = useState<AuditEvent | null>(null);
+  const [open, setOpen] = useState<BackendAuditLog | null>(null);
+  const { data: logs = [], isLoading } = useAuditoria();
+
   return (
     <div>
       <PageHeader
@@ -20,36 +23,34 @@ function AuditoriaPage() {
         description="Registro inmutable de acciones humanas y asistidas por IA. Cada entrada es firmada y consultable."
       />
       <div className="mx-auto max-w-[1440px] px-4 pb-16 sm:px-6 lg:px-10">
+        {isLoading ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">Cargando registros…</p>
+        ) : (
         <div className="overflow-hidden rounded-2xl border border-border bg-card">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <th className="px-5 py-3 font-medium">Fecha</th>
-                <th className="px-5 py-3 font-medium">Usuario</th>
-                <th className="px-5 py-3 font-medium">Rol</th>
                 <th className="px-5 py-3 font-medium">Acción</th>
-                <th className="px-5 py-3 font-medium">Módulo</th>
-                <th className="px-5 py-3 font-medium">Colaborador</th>
+                <th className="px-5 py-3 font-medium">Entidad</th>
                 <th className="px-5 py-3 font-medium">Modelo IA</th>
                 <th className="px-5 py-3 font-medium">Estado</th>
               </tr>
             </thead>
             <tbody>
-              {auditSeed.map((a) => (
+              {logs.map((a) => (
                 <tr key={a.id} onClick={() => setOpen(a)} className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-surface-elevated/40">
-                  <td className="px-5 py-4 font-mono text-xs text-muted-foreground">{a.fecha}</td>
-                  <td className="px-5 py-4 text-foreground">{a.usuario}</td>
-                  <td className="px-5 py-4 text-muted-foreground">{a.rol}</td>
-                  <td className="px-5 py-4 text-foreground">{a.accion}</td>
-                  <td className="px-5 py-4 text-muted-foreground">{a.modulo}</td>
-                  <td className="px-5 py-4 text-muted-foreground">{a.empleado ?? "—"}</td>
-                  <td className="px-5 py-4 text-muted-foreground">{a.modelo} {a.version !== "—" && a.version}</td>
-                  <td className="px-5 py-4"><StatusBadge tone={a.estado === "Aprobado" ? "success" : a.estado === "Rechazado" ? "muted" : "muted"}>{a.estado}</StatusBadge></td>
+                  <td className="px-5 py-4 font-mono text-xs text-muted-foreground">{a.createdAt.slice(0, 16).replace("T", " ")}</td>
+                  <td className="px-5 py-4 text-foreground">{a.action}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{a.entity ?? "—"}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{a.aiModel ?? "Regla determinista"}</td>
+                  <td className="px-5 py-4"><StatusBadge tone="muted">Registrado</StatusBadge></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       <Sheet open={!!open} onOpenChange={(o) => !o && setOpen(null)}>
@@ -57,25 +58,19 @@ function AuditoriaPage() {
           <SheetTitle className="sr-only">Detalle de evento</SheetTitle>
           {open && (
             <div>
-              <p className="text-[11px] uppercase tracking-wider text-primary">{open.modulo}</p>
-              <h2 className="mt-1 font-display text-2xl text-foreground">{open.accion}</h2>
-              <p className="mt-1 font-mono text-xs text-muted-foreground">{open.fecha}</p>
+              <p className="text-[11px] uppercase tracking-wider text-primary">{open.entity ?? "sistema"}</p>
+              <h2 className="mt-1 font-display text-2xl text-foreground">{open.action}</h2>
+              <p className="mt-1 font-mono text-xs text-muted-foreground">{open.createdAt.slice(0, 16).replace("T", " ")}</p>
               <dl className="mt-6 space-y-3 text-sm">
-                <Row k="Usuario" v={`${open.usuario} · ${open.rol}`} />
-                <Row k="Colaborador" v={open.empleado ?? "—"} />
-                <Row k="Fuente" v={open.fuente} />
-                <Row k="Modelo IA" v={`${open.modelo} ${open.version}`} />
+                <Row k="Entidad ID" v={open.entityId ?? "—"} />
+                <Row k="Modelo IA" v={open.aiModel ?? "Regla determinista"} />
               </dl>
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-border bg-background/40 p-4">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Sugerencia IA</p>
-                  <p className="mt-2 text-sm text-foreground">Borrador generado por modelo {open.modelo}. Disponible en historial.</p>
+              {open.payload != null && (
+                <div className="mt-6 rounded-xl border border-border bg-background/40 p-4">
+                  <p className="mb-2 text-[11px] uppercase tracking-wider text-muted-foreground">Payload</p>
+                  <pre className="overflow-auto text-xs text-muted-foreground">{JSON.stringify(open.payload, null, 2)}</pre>
                 </div>
-                <div className="rounded-xl border border-primary/30 bg-primary/8 p-4">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Versión aprobada</p>
-                  <p className="mt-2 text-sm text-foreground">Aprobada y firmada por {open.usuario}.</p>
-                </div>
-              </div>
+              )}
             </div>
           )}
         </SheetContent>
