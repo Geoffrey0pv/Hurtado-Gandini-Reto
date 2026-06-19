@@ -1249,7 +1249,7 @@ function DisciplinarioTab({ empleado: e }: { empleado: Employee }) {
                       </span>
                       <div className="flex-1">
                         <p className={`text-sm ${done ? "text-foreground line-through decoration-emerald-400/60" : "text-foreground"}`}>{idx + 1}. {et.label}</p>
-                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{done ? "Cumplida" : idx === ETAPAS.findIndex((e) => !selected.etapas[e.key]) ? "En curso" : "Pendiente"}</p>
+                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{done ? "Cumplida" : idx === ETAPAS.findIndex((etp) => !(selected.etapas?.[etp.key] ?? false)) ? "En curso" : "Pendiente"}</p>
                       </div>
                     </button>
                   </li>
@@ -1261,7 +1261,7 @@ function DisciplinarioTab({ empleado: e }: { empleado: Employee }) {
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Notificar al colaborador</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <a
-                  href={`mailto:${e.correo}?subject=${encodeURIComponent("Citación a diligencia de descargos")}&body=${encodeURIComponent(selected.cartaTexto)}`}
+                  href={`mailto:${e.correo}?subject=${encodeURIComponent("Citación a diligencia de descargos")}&body=${encodeURIComponent(selected.cartaTexto ?? "")}`}
                   onClick={() => registrarNotificacion(selected.id, "email")}
                   className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                 >
