@@ -58,6 +58,24 @@ services:
       exit 0;
       "
 
+  # Tunel Cloudflare: expone el backend (que corre en el HOST con `npm run dev`,
+  # puerto 3000) en una URL publica para que un companero acceda sin estar en tu
+  # red. Solo lo corre QUIEN tiene el backend; el companero solo cambia
+  # VITE_API_URL en el frontend. Por eso apuntamos a host.docker.internal.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: legaltech-tunnel
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # el contenedor alcanza el host (Linux)
+    # OPCION A (rapida, sin cuenta): URL aleatoria *.trycloudflare.com que CAMBIA
+    # en cada reinicio. Para verla:  docker compose logs -f cloudflared
+    command: tunnel --no-autoupdate --url http://host.docker.internal:3000
+    # OPCION B (estable, URL fija): requiere cuenta Cloudflare + dominio. Crea el
+    # tunel en el dashboard Zero Trust, define TUNNEL_TOKEN en backend/.env, y
+    # reemplaza el `command` de arriba por la siguiente linea:
+    # command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+
 volumes:
   pgdata:
   redisdata:
