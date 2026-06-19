@@ -1,6 +1,5 @@
 import { Outlet, redirect, createFileRoute } from "@tanstack/react-router";
 import { InstitutionalTopbar } from "@/components/layout/InstitutionalTopbar";
-import { FloatingCommandDock } from "@/components/layout/FloatingCommandDock";
 import { isAuthenticated } from "@/lib/auth";
 
 export const Route = createFileRoute("/_app")({
@@ -18,8 +17,7 @@ function AppLayout() {
   return (
     <div className="relative min-h-screen bg-background">
       <InstitutionalTopbar />
-      <FloatingCommandDock />
-      <main className="lg:pl-20">
+      <main>
         <Outlet />
       </main>
       <footer className="mt-16 border-t border-border bg-background/60">

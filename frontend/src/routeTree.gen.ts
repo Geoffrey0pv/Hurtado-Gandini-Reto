@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiTtsRouteImport } from './routes/api/tts'
 import { Route as AppRevisionRouteImport } from './routes/_app.revision'
 import { Route as AppOrganizacionRouteImport } from './routes/_app.organizacion'
+import { Route as AppObligacionesRouteImport } from './routes/_app.obligaciones'
 import { Route as AppDocumentosRouteImport } from './routes/_app.documentos'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppAuditoriaRouteImport } from './routes/_app.auditoria'
@@ -51,6 +52,11 @@ const AppRevisionRoute = AppRevisionRouteImport.update({
 const AppOrganizacionRoute = AppOrganizacionRouteImport.update({
   id: '/organizacion',
   path: '/organizacion',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppObligacionesRoute = AppObligacionesRouteImport.update({
+  id: '/obligaciones',
+  path: '/obligaciones',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDocumentosRoute = AppDocumentosRouteImport.update({
@@ -103,6 +109,7 @@ export interface FileRoutesByFullPath {
   '/auditoria': typeof AppAuditoriaRoute
   '/dashboard': typeof AppDashboardRoute
   '/documentos': typeof AppDocumentosRoute
+  '/obligaciones': typeof AppObligacionesRoute
   '/organizacion': typeof AppOrganizacionRoute
   '/revision': typeof AppRevisionRoute
   '/api/tts': typeof ApiTtsRoute
@@ -118,6 +125,7 @@ export interface FileRoutesByTo {
   '/auditoria': typeof AppAuditoriaRoute
   '/dashboard': typeof AppDashboardRoute
   '/documentos': typeof AppDocumentosRoute
+  '/obligaciones': typeof AppObligacionesRoute
   '/organizacion': typeof AppOrganizacionRoute
   '/revision': typeof AppRevisionRoute
   '/api/tts': typeof ApiTtsRoute
@@ -135,6 +143,7 @@ export interface FileRoutesById {
   '/_app/auditoria': typeof AppAuditoriaRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/documentos': typeof AppDocumentosRoute
+  '/_app/obligaciones': typeof AppObligacionesRoute
   '/_app/organizacion': typeof AppOrganizacionRoute
   '/_app/revision': typeof AppRevisionRoute
   '/api/tts': typeof ApiTtsRoute
@@ -152,6 +161,7 @@ export interface FileRouteTypes {
     | '/auditoria'
     | '/dashboard'
     | '/documentos'
+    | '/obligaciones'
     | '/organizacion'
     | '/revision'
     | '/api/tts'
@@ -167,6 +177,7 @@ export interface FileRouteTypes {
     | '/auditoria'
     | '/dashboard'
     | '/documentos'
+    | '/obligaciones'
     | '/organizacion'
     | '/revision'
     | '/api/tts'
@@ -183,6 +194,7 @@ export interface FileRouteTypes {
     | '/_app/auditoria'
     | '/_app/dashboard'
     | '/_app/documentos'
+    | '/_app/obligaciones'
     | '/_app/organizacion'
     | '/_app/revision'
     | '/api/tts'
@@ -241,6 +253,13 @@ declare module '@tanstack/react-router' {
       path: '/organizacion'
       fullPath: '/organizacion'
       preLoaderRoute: typeof AppOrganizacionRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/obligaciones': {
+      id: '/_app/obligaciones'
+      path: '/obligaciones'
+      fullPath: '/obligaciones'
+      preLoaderRoute: typeof AppObligacionesRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/documentos': {
@@ -307,6 +326,7 @@ interface AppRouteChildren {
   AppAuditoriaRoute: typeof AppAuditoriaRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppDocumentosRoute: typeof AppDocumentosRoute
+  AppObligacionesRoute: typeof AppObligacionesRoute
   AppOrganizacionRoute: typeof AppOrganizacionRoute
   AppRevisionRoute: typeof AppRevisionRoute
   AppColaboradoresIdRoute: typeof AppColaboradoresIdRoute
@@ -320,6 +340,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAuditoriaRoute: AppAuditoriaRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppDocumentosRoute: AppDocumentosRoute,
+  AppObligacionesRoute: AppObligacionesRoute,
   AppOrganizacionRoute: AppOrganizacionRoute,
   AppRevisionRoute: AppRevisionRoute,
   AppColaboradoresIdRoute: AppColaboradoresIdRoute,

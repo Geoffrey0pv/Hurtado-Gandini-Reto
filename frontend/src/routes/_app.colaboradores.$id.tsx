@@ -16,6 +16,7 @@ import { useDocumentos as useDocumentosAPI, useUploadDocumento, useDeleteDocumen
 import { useExpedientes, useCreateExpediente, useUpdateExpediente, useDebidoProceso } from "@/hooks/useDisciplinario";
 import { useNovedades as useNovedadesAPI, useCreateNovedad, useDeleteNovedad } from "@/hooks/useNovedades";
 import { useAlertas } from "@/hooks/useAlertas";
+import { useContratos } from "@/hooks/useContratos";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { LegalWarningBanner } from "@/components/common/LegalWarningBanner";
 import {
@@ -29,7 +30,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 
 const tabSchema = z.object({
   tab: z
-    .enum(["resumen", "obligaciones", "timesheet", "riesgo", "pago", "calendario", "documentos", "alertas", "disciplinario"])
+    .enum(["resumen", "contrato", "obligaciones", "timesheet", "riesgo", "pago", "calendario", "documentos", "alertas", "disciplinario"])
     .catch("resumen"),
 });
 
@@ -41,6 +42,7 @@ export const Route = createFileRoute("/_app/colaboradores/$id")({
 
 const tabs = [
   { key: "resumen", label: "Resumen" },
+  { key: "contrato", label: "Contrato" },
   { key: "obligaciones", label: "Obligaciones" },
   { key: "timesheet", label: "Timesheet" },
   { key: "riesgo", label: "Riesgo & liquidación" },
@@ -192,6 +194,8 @@ function ProfilePage() {
           </div>
         )}
 
+        {tab === "contrato" && <ContratoTab empleado={e} />}
+
         {tab === "obligaciones" && <ObligacionesTab empleado={e} />}
 
         {tab === "timesheet" && <TimesheetTab empleadoId={e.id} salario={e.salario} jornada={e.jornada} />}
@@ -229,6 +233,100 @@ function ProfilePage() {
         {tab === "disciplinario" && <DisciplinarioTab empleado={e} />}
 
       </div>
+    </div>
+  );
+}
+
+// ─── Contrato tab ────────────────────────────────────────────────────────────
+
+const CONTRATO_TIPO_LABEL: Record<string, string> = {
+  TERMINO_FIJO: "Término fijo",
+  TERMINO_INDEFINIDO: "Término indefinido",
+  OBRA_LABOR: "Obra o labor",
+  PRESTACION_SERVICIOS: "Prestación de servicios",
+  APRENDIZAJE: "Aprendizaje",
+  OTRO: "Otro",
+};
+
+const CONTRATO_ESTADO: Record<string, { label: string; tone: "success" | "warning" | "primary" | "muted" }> = {
+  DONE: { label: "Procesado", tone: "success" },
+  PROCESSING: { label: "Procesando", tone: "primary" },
+  PENDING: { label: "En cola", tone: "warning" },
+  FAILED: { label: "Falló", tone: "warning" },
+};
+
+function ContratoTab({ empleado: e }: { empleado: Employee }) {
+  const { data: contratos = [], isLoading } = useContratos();
+  const contrato = useMemo(() => {
+    return contratos
+      .filter((c) => c.colaboradorId === e.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  }, [contratos, e.id]);
+
+  if (isLoading) {
+    return (
+      <div className="rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+        Cargando contrato…
+      </div>
+    );
+  }
+
+  if (!contrato) {
+    return (
+      <EmptyState
+        title="Sin contrato cargado"
+        description="Este colaborador aún no tiene un contrato digitalizado. Puedes cargarlo desde el flujo de contrato."
+        icon={<FileText className="h-6 w-6" />}
+        action={
+          <Link
+            to="/colaboradores/nuevo-contrato"
+            className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/15 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/25"
+          >
+            <FilePlus2 className="h-4 w-4" /> Cargar contrato
+          </Link>
+        }
+      />
+    );
+  }
+
+  const estado = CONTRATO_ESTADO[contrato.status] ?? { label: contrato.status, tone: "muted" as const };
+  const tipoLabel = contrato.tipoContrato ? (CONTRATO_TIPO_LABEL[contrato.tipoContrato] ?? contrato.tipoContrato) : "—";
+  const salario = contrato.salario != null ? formatCOP(Number(contrato.salario)) : "—";
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-2">
+      <DossierCard title="Datos del contrato" icon={<FileText className="h-4 w-4" />}>
+        <Row k="Modalidad" v={tipoLabel} dot="ok" />
+        <Row k="Salario mensual" v={salario} dot="warn" />
+        <Row k="Inicio" v={contrato.fechaInicio ? formatDate(contrato.fechaInicio) : "—"} icon={<CalendarDays className="h-3 w-3" />} dot="ok" />
+        <Row k="Terminación" v={contrato.fechaFin ? formatDate(contrato.fechaFin) : "Indefinida"} icon={<CalendarDays className="h-3 w-3" />} dot="ok" />
+        <Row k="Jornada" v={contrato.jornadaHorasSemana != null ? `${contrato.jornadaHorasSemana} h/sem` : "—"} dot="ok" />
+      </DossierCard>
+
+      <DossierCard title="Documento" icon={<Paperclip className="h-4 w-4" />}>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">Estado de ingesta</span>
+          <StatusBadge tone={estado.tone}>{estado.label}</StatusBadge>
+        </div>
+        <p className="mt-4 text-[11px] uppercase tracking-wider text-muted-foreground">Archivo</p>
+        {contrato.fileUrl ? (
+          <a
+            href={contrato.fileUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-border bg-background/40 px-3 py-2 text-sm text-foreground hover:border-primary/40 hover:text-primary"
+          >
+            <Download className="h-4 w-4" /> Ver / descargar contrato
+          </a>
+        ) : (
+          <p className="mt-2 text-sm text-muted-foreground">El archivo aún no está disponible.</p>
+        )}
+        {contrato.status === "FAILED" && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            La extracción automática falló. El documento sigue disponible para revisión manual.
+          </p>
+        )}
+      </DossierCard>
     </div>
   );
 }
@@ -403,21 +501,19 @@ function CompliancePanel({ empleadoId, salario }: { empleadoId: string; salario:
         </div>
       </div>
 
-      <RegistrarHorasForm empleadoId={empleadoId} salario={salario} onAdd={addEntry} />
-
       <div className="mt-6 flex items-center justify-between">
         <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Registro de horas (bitácora)</p>
         <p className="text-xs text-muted-foreground">{totales.horas} h · {formatCOP(totales.valor)}</p>
       </div>
 
       <ul className="mt-3 space-y-2">
-        {empEntries.length === 0 && (
+        {entries.length === 0 && (
           <li className="rounded-xl border border-dashed border-border bg-background/30 px-4 py-6 text-center text-sm text-muted-foreground">
-            Aún no hay horas registradas.
+            Aún no hay horas registradas. Regístralas desde la pestaña Timesheet.
           </li>
         )}
-        {empEntries.map((x) => (
-          <BitacoraRow key={x.id} entry={x} salario={salario} onRemove={() => removeEntry(x.id)} />
+        {entries.map((x) => (
+          <BitacoraRow key={x.id} entry={x} salario={salario} />
         ))}
       </ul>
 
@@ -433,7 +529,9 @@ function RegistrarHorasForm({
 }: {
   empleadoId: string;
   salario: number;
-  onAdd: ReturnType<typeof useTimesheet>["addEntry"];
+  onAdd: (e: { empleadoId: string; fecha: string; horas: number; tipo: TipoHora; notas?: string }) =>
+    | { ok: true }
+    | { ok: false; reason: string };
   includePto?: boolean;
 }) {
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
@@ -490,9 +588,11 @@ function RegistrarHorasForm({
   );
 }
 
-function BitacoraRow({ entry, salario, onRemove }: { entry: TimesheetEntry; salario: number; onRemove: () => void }) {
-  const f = FACTORES_HORA[entry.tipo];
-  const valor = calcularValorEntrada(salario, entry.horas, entry.tipo);
+function BitacoraRow({ entry, salario, onRemove }: { entry: BackendTimesheetEntry; salario: number; onRemove?: () => void }) {
+  const tipo = entry.tipo as TipoHora;
+  const horas = Number(entry.horas);
+  const f = FACTORES_HORA[tipo];
+  const valor = calcularValorEntrada(salario, horas, tipo);
   const tone = f.family === "extra" ? "primary" : f.family === "recargo" ? "warning" : f.family === "dom" ? "warning" : "muted";
   const d = new Date(entry.fecha + "T00:00:00");
   const dayLabel = d.toLocaleDateString("es-CO", { day: "2-digit", month: "short" });
@@ -503,11 +603,15 @@ function BitacoraRow({ entry, salario, onRemove }: { entry: TimesheetEntry; sala
         <StatusBadge tone={tone}>{f.label}</StatusBadge>
         <p className="mt-1 text-[11px] text-muted-foreground">registrado {entry.fecha}</p>
       </div>
-      <span className="text-right text-muted-foreground">{entry.horas} h</span>
+      <span className="text-right text-muted-foreground">{horas} h</span>
       <span className="text-right font-medium text-foreground">{formatCOP(valor)}</span>
-      <button onClick={onRemove} className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground" aria-label="Eliminar">
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
+      {onRemove ? (
+        <button onClick={onRemove} className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground" aria-label="Eliminar">
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      ) : (
+        <span />
+      )}
     </li>
   );
 }
@@ -1044,7 +1148,7 @@ function DisciplinarioTab({ empleado: e }: { empleado: Employee }) {
   const [hora, setHora] = useState("10:00 a.m.");
   const [modalidad, setModalidad] = useState<"Presencial" | "Virtual">("Presencial");
   const [lugar, setLugar] = useState("Sala de juntas");
-  const [asistentes, setAsistentes] = useState("Trabajador, Jefe inmediato, RRHH, Testigo");
+  const [asistentes, setAsistentes] = useState("Colaborador, Jefe inmediato, RRHH, Testigo");
   const [ciudad, setCiudad] = useState("Medellín");
   const [crearTeams, setCrearTeams] = useState(false);
 
@@ -1133,11 +1237,11 @@ function DisciplinarioTab({ empleado: e }: { empleado: Employee }) {
             </header>
             <ol className="space-y-3">
               {ETAPAS.map((et, idx) => {
-                const done = selected.etapas[et.key];
+                const done = selected.etapas?.[et.key] ?? false;
                 return (
                   <li key={et.key}>
                     <button
-                      onClick={() => toggleEtapa(selected.id, et.key)}
+                      onClick={() => toggleEtapa(selected.id, et.key, !done)}
                       className="flex w-full items-center gap-3 rounded-lg px-2 py-1 text-left hover:bg-background/40"
                     >
                       <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${done ? "border-emerald-400 bg-emerald-400/20 text-emerald-300" : "border-border text-muted-foreground"}`}>
@@ -1145,7 +1249,7 @@ function DisciplinarioTab({ empleado: e }: { empleado: Employee }) {
                       </span>
                       <div className="flex-1">
                         <p className={`text-sm ${done ? "text-foreground line-through decoration-emerald-400/60" : "text-foreground"}`}>{idx + 1}. {et.label}</p>
-                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{done ? "Cumplida" : idx === ETAPAS.findIndex((e) => !selected.etapas[e.key]) ? "En curso" : "Pendiente"}</p>
+                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{done ? "Cumplida" : idx === ETAPAS.findIndex((etp) => !(selected.etapas?.[etp.key] ?? false)) ? "En curso" : "Pendiente"}</p>
                       </div>
                     </button>
                   </li>
@@ -1157,21 +1261,21 @@ function DisciplinarioTab({ empleado: e }: { empleado: Employee }) {
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Notificar al colaborador</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <a
-                  href={`mailto:${e.correo}?subject=${encodeURIComponent("Citación a diligencia de descargos")}&body=${encodeURIComponent(selected.cartaTexto)}`}
+                  href={`mailto:${e.correo}?subject=${encodeURIComponent("Citación a diligencia de descargos")}&body=${encodeURIComponent(selected.cartaTexto ?? "")}`}
                   onClick={() => registrarNotificacion(selected.id, "email")}
                   className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                 >
                   <Mail className="h-3.5 w-3.5" />Enviar por correo ({e.correo})
                 </a>
                 <a
-                  href={`sms:${e.telefono.replace(/\s/g, "")}?&body=${encodeURIComponent(`Citación a descargos: diligencia el ${fmtFechaLarga(selected.fechaDiligencia)} a las ${selected.hora} (${selected.modalidad}, ${selected.lugar}). Carta formal enviada al correo registrado.`)}`}
+                  href={`sms:${e.telefono.replace(/\s/g, "")}?&body=${encodeURIComponent(`Citación a descargos: diligencia el ${fmtFechaLarga(selected.fechaDiligencia ?? "")} a las ${selected.hora ?? ""} (${selected.modalidad ?? ""}, ${selected.lugar ?? ""}). Carta formal enviada al correo registrado.`)}`}
                   onClick={() => registrarNotificacion(selected.id, "telefono")}
                   className="inline-flex items-center gap-2 rounded-full border border-border-strong px-4 py-2 text-xs font-medium text-foreground hover:bg-surface-elevated"
                 >
                   <MessageSquare className="h-3.5 w-3.5" />Enviar SMS ({e.telefono})
                 </a>
                 <button
-                  onClick={() => descargarCartaDoc(selected.cartaTexto, `carta-descargos-${e.id}-${selected.id}`)}
+                  onClick={() => descargarCartaDoc(selected.cartaTexto ?? "", `carta-descargos-${e.id}-${selected.id}`)}
                   className="inline-flex items-center gap-2 rounded-full border border-border-strong px-4 py-2 text-xs font-medium text-foreground hover:bg-surface-elevated"
                 >
                   <Download className="h-3.5 w-3.5" />Exportar a Word
@@ -1795,7 +1899,7 @@ function CalendarioTab({ empleado: e }: { empleado: Employee }) {
                       </div>
                       {ev.tipo === "novedad" && ev.novedadId && (
                         <button
-                          onClick={() => { remove(ev.novedadId!); toast.message("Novedad eliminada"); }}
+                          onClick={() => { deleteNovedad.mutate(ev.novedadId!); toast.message("Novedad eliminada"); }}
                           className="grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                           aria-label="Eliminar novedad"
                         >
@@ -1853,7 +1957,7 @@ function CalendarioTab({ empleado: e }: { empleado: Employee }) {
           <RegistrarNovedadForm
             empleadoId={e.id}
             vacDisponibles={vacDisponibles}
-            onAdd={add}
+            onAdd={(data) => createNovedad.mutate(data)}
           />
         </div>
       </div>
@@ -1871,19 +1975,16 @@ function CalendarioTab({ empleado: e }: { empleado: Employee }) {
               <li key={n.id} className="grid grid-cols-[1fr_auto] items-center gap-3 py-3 text-sm">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <StatusBadge tone={NOVEDAD_TONE[n.tipo]}>{NOVEDAD_LABEL[n.tipo]}</StatusBadge>
-                    <span className="text-foreground">{formatDate(n.desde)} → {formatDate(n.hasta)}</span>
-                    <span className="text-xs text-muted-foreground">({diasEntre(n.desde, n.hasta)} días)</span>
+                    <StatusBadge tone={(NOVEDAD_TONE as Record<string, "primary" | "warning" | "muted" | "success">)[n.tipo] ?? "muted"}>
+                      {(NOVEDAD_LABEL as Record<string, string>)[n.tipo] ?? n.tipo}
+                    </StatusBadge>
+                    <span className="text-foreground">{formatDate(n.fecha)}</span>
+                    {n.origen && <span className="text-xs text-muted-foreground">({n.origen})</span>}
                   </div>
-                  {n.nota && <p className="mt-1 text-xs text-muted-foreground">{n.nota}</p>}
-                  {n.documento && (
-                    <p className="mt-1 inline-flex items-center gap-1 text-xs text-primary">
-                      <Paperclip className="h-3 w-3" /> {n.documento.nombre}
-                    </p>
-                  )}
+                  {n.descripcion && <p className="mt-1 text-xs text-muted-foreground">{n.descripcion}</p>}
                 </div>
                 <button
-                  onClick={() => { remove(n.id); toast.message("Novedad eliminada"); }}
+                  onClick={() => { deleteNovedad.mutate(n.id); toast.message("Novedad eliminada"); }}
                   className="grid h-7 w-7 place-items-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   aria-label="Eliminar"
                 >
@@ -1903,7 +2004,7 @@ function RegistrarNovedadForm({
 }: {
   empleadoId: string;
   vacDisponibles: number;
-  onAdd: ReturnType<typeof useNovedades>["add"];
+  onAdd: (data: { colaboradorId: string; tipo: NovedadTipo; fecha: string; descripcion?: string }) => void;
 }) {
   const hoy = new Date().toISOString().slice(0, 10);
   const [tipo, setTipo] = useState<NovedadTipo>("incapacidad");
@@ -1929,13 +2030,16 @@ function RegistrarNovedadForm({
       toast.error("La incapacidad requiere documento soporte (EPS/ARL).");
       return;
     }
+    const detalle = [
+      nota.trim() || null,
+      `Del ${desde} al ${hasta} (${dias} ${dias === 1 ? "día" : "días"})`,
+      archivo ? `Soporte: ${archivo.name}` : null,
+    ].filter(Boolean).join(" · ");
     onAdd({
-      empleadoId,
+      colaboradorId: empleadoId,
       tipo,
-      desde,
-      hasta,
-      nota: nota.trim() || undefined,
-      documento: archivo ? { nombre: archivo.name, size: archivo.size } : undefined,
+      fecha: desde,
+      descripcion: detalle || undefined,
     });
     toast.success(`${NOVEDAD_LABEL[tipo]} registrada · ${dias} días`);
     setNota("");
@@ -2123,7 +2227,7 @@ function DocumentosTab({ empleado: e }: { empleado: Employee }) {
         <section className="rounded-2xl border border-border bg-card">
           <header className="flex items-center justify-between border-b border-border px-5 py-4">
             <div>
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Bitácora del trabajador</p>
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Bitácora del colaborador</p>
               <p className="mt-1 text-xs text-muted-foreground">Notas internas del perfil.</p>
             </div>
             {note.trim().length > 0 && <span className="text-[10px] text-muted-foreground">{note.length} car.</span>}
