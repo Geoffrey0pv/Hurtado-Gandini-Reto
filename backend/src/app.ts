@@ -34,7 +34,12 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // ── CORS ────────────────────────────────────────────────────────────
   await app.register(cors, {
-    origin: [env.FRONTEND_URL, "http://localhost:4000", "http://localhost:3000"],
+    // En desarrollo aceptamos cualquier puerto de localhost (Vite puede elegir
+    // 8080/8081/5173 segun disponibilidad). En produccion solo FRONTEND_URL.
+    origin:
+      env.NODE_ENV === "development"
+        ? /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+        : [env.FRONTEND_URL],
     credentials: true,
   });
 
