@@ -87,6 +87,33 @@ export function alertaVacaciones(
   };
 }
 
+// ── Liquidacion definitiva pendiente ──
+// Al terminar el contrato (fechaFin pasada) la liquidacion definitiva debe
+// pagarse de inmediato; el retardo genera indemnizacion moratoria (Art. 65 CST).
+export function alertaLiquidacionPendiente(
+  fechaFin: Date,
+  hoy: Date = new Date(),
+): Alerta {
+  const diasDesdeFin = diasCalendario(fechaFin, hoy); // positivo si ya termino
+
+  if (diasDesdeFin > 0) {
+    return {
+      tipo: "LIQUIDACION_PENDIENTE",
+      severidad: "CRITICA",
+      diasRestantes: -diasDesdeFin,
+      mensaje: `El contrato termino hace ${diasDesdeFin} dias. La liquidacion definitiva debe estar pagada; el retardo genera indemnizacion moratoria.`,
+      baseLegal: "Art. 65 CST",
+    };
+  }
+  return {
+    tipo: "LIQUIDACION_PENDIENTE",
+    severidad: "OK",
+    diasRestantes: null,
+    mensaje: "Sin liquidacion pendiente.",
+    baseLegal: "Art. 65 CST",
+  };
+}
+
 // ── Proximo pago de seguridad social ──
 // Las planillas vencen segun el ultimo digito del NIT; aqui usamos un dia de
 // corte simple (parametrizable) para recordar el pago del mes.

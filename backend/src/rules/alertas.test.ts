@@ -4,6 +4,7 @@ import {
   alertaVencimientoContrato,
   alertaVacaciones,
   alertaSeguridadSocial,
+  alertaLiquidacionPendiente,
 } from "./alertas.js";
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -49,4 +50,16 @@ test("seguridad social: faltan pocos dias => ADVERTENCIA", () => {
   const r = alertaSeguridadSocial(d("2026-06-08"), 10);
   assert.equal(r.severidad, "ADVERTENCIA");
   assert.equal(r.diasRestantes, 2);
+});
+
+test("liquidacion pendiente: contrato terminado => CRITICA con dias negativos", () => {
+  const r = alertaLiquidacionPendiente(d("2026-06-01"), d("2026-06-18"));
+  assert.equal(r.severidad, "CRITICA");
+  assert.equal(r.tipo, "LIQUIDACION_PENDIENTE");
+  assert.ok(r.diasRestantes !== null && r.diasRestantes < 0);
+});
+
+test("liquidacion pendiente: contrato vigente => OK", () => {
+  const r = alertaLiquidacionPendiente(d("2026-12-31"), d("2026-06-18"));
+  assert.equal(r.severidad, "OK");
 });

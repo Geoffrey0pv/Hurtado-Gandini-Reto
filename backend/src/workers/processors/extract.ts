@@ -6,7 +6,7 @@ import { db } from "../../db/index.js";
 import { colaboradores, contratos, ingestionJobs } from "../../db/schema.js";
 import { extractContract } from "../../lib/llm.js";
 import { extractTextFromPdf } from "../../lib/ocr.js";
-import { embedQueue, type ExtractJobData } from "../../lib/queue.js";
+import { analysisQueue, embedQueue, type ExtractJobData } from "../../lib/queue.js";
 import { downloadBuffer } from "../../lib/storage.js";
 import { writeAuditLog } from "../../shared/audit.js";
 
@@ -61,6 +61,10 @@ export async function runIngestion(data: ExtractJobData): Promise<void> {
 
     // 12) Encolar embeddings (cola separada, mas concurrencia).
     await embedQueue.add("embed", { contratoId, organizationId });
+
+    // 13) Encolar analisis determinista (reglas: jornada/liquidacion/alertas)
+    //     que corre automaticamente tras la extraccion y deja traza en audit_logs.
+    await analysisQueue.add("analysis", { contratoId, organizationId });
 
     // 15) Trazabilidad.
     await writeAuditLog({

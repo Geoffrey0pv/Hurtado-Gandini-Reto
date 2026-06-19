@@ -3,6 +3,7 @@
 import { dias360, parseISODate } from "./constants.js";
 import { validarJornada, type JornadaResult } from "./jornada.js";
 import {
+  alertaLiquidacionPendiente,
   alertaVacaciones,
   alertaVencimientoContrato,
   type Alerta,
@@ -69,6 +70,7 @@ export function analizarContrato(
   // ── Alertas ──
   if (datos.fechaFin) {
     alertas.push(alertaVencimientoContrato(parseISODate(datos.fechaFin), hoy));
+    alertas.push(alertaLiquidacionPendiente(parseISODate(datos.fechaFin), hoy));
   }
   if (datos.fechaInicio) {
     alertas.push(alertaVacaciones(parseISODate(datos.fechaInicio), hoy));

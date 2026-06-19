@@ -4,13 +4,16 @@
 import { Worker } from "bullmq";
 import {
   queueConnection,
+  QUEUE_ANALYSIS,
   QUEUE_EMBED,
   QUEUE_EXTRACT,
+  type AnalysisJobData,
   type EmbedJobData,
   type ExtractJobData,
 } from "../lib/queue.js";
 import { runIngestion } from "./processors/extract.js";
 import { runEmbedding } from "./processors/embed.js";
+import { runAnalysis } from "./processors/analysis.js";
 
 export function startWorkers() {
   const extractWorker = new Worker<ExtractJobData>(
@@ -25,7 +28,18 @@ export function startWorkers() {
     { connection: queueConnection, concurrency: 3 },
   );
 
-  for (const [name, w] of [["extract", extractWorker], ["embed", embedWorker]] as const) {
+  // Analisis determinista (sin IA, liviano): puede ir con mas concurrencia.
+  const analysisWorker = new Worker<AnalysisJobData>(
+    QUEUE_ANALYSIS,
+    async (job) => runAnalysis(job.data),
+    { connection: queueConnection, concurrency: 3 },
+  );
+
+  for (const [name, w] of [
+    ["extract", extractWorker],
+    ["embed", embedWorker],
+    ["analysis", analysisWorker],
+  ] as const) {
     w.on("completed", (job) => console.log(`[${name}] job ${job.id} OK`));
     w.on("failed", (job, err) =>
       console.error(`[${name}] job ${job?.id} FAILED: ${err?.message}`),
@@ -33,5 +47,5 @@ export function startWorkers() {
     w.on("error", (err) => console.error(`[${name}] worker error:`, err.message));
   }
 
-  return { extractWorker, embedWorker };
+  return { extractWorker, embedWorker, analysisWorker };
 }

@@ -20,8 +20,8 @@ test("analisis completo: termino fijo con todos los datos", () => {
   assert.equal("cumple" in r.jornada && r.jornada.cumple, false);
   // liquidacion aplica
   assert.ok("total" in r.liquidacion && r.liquidacion.total > 0);
-  // dos alertas: vencimiento + vacaciones
-  assert.equal(r.alertas.length, 2);
+  // tres alertas (fechaFin presente): vencimiento + liquidacion pendiente + vacaciones
+  assert.equal(r.alertas.length, 3);
 });
 
 test("analisis: sin datos suficientes marca aplica:false", () => {
