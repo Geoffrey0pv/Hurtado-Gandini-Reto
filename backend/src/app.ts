@@ -20,7 +20,7 @@ import { novedadesRoutes } from "./modules/novedades/routes.js";
 import { alertasRoutes } from "./modules/alertas/routes.js";
 import { auditLogsRoutes } from "./modules/audit-logs/routes.js";
 import { dashboardRoutes } from "./modules/dashboard/routes.js";
-import { ragRoutes, auditLogRoutes } from "./modules/rag/routes.js";
+import { ragRoutes } from "./modules/rag/routes.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -34,7 +34,12 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // ── CORS ────────────────────────────────────────────────────────────
   await app.register(cors, {
-    origin: [env.FRONTEND_URL, "http://localhost:4000", "http://localhost:3000"],
+    // En desarrollo aceptamos cualquier puerto de localhost (Vite puede elegir
+    // 8080/8081/5173 segun disponibilidad). En produccion solo FRONTEND_URL.
+    origin:
+      env.NODE_ENV === "development"
+        ? /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+        : [env.FRONTEND_URL],
     credentials: true,
   });
 
@@ -92,7 +97,6 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(auditLogsRoutes, { prefix: "/audit-logs" });
   await app.register(dashboardRoutes, { prefix: "/dashboard" });
   await app.register(ragRoutes, { prefix: "/rag" });
-  await app.register(auditLogRoutes, { prefix: "/audit-logs" });
 
   return app;
 }

@@ -16,6 +16,7 @@ export const queueConnection = connection as unknown as ConnectionOptions;
 // Nombres de cola (separadas por carga: LLM serie vs embeddings livianos).
 export const QUEUE_EXTRACT = "extract";
 export const QUEUE_EMBED = "embed";
+export const QUEUE_ANALYSIS = "analysis";
 
 // Payloads de los jobs.
 export interface ExtractJobData {
@@ -28,6 +29,12 @@ export interface ExtractJobData {
 }
 
 export interface EmbedJobData {
+  contratoId: string;
+  organizationId: string;
+}
+
+// Analisis determinista (reglas en codigo, sin IA) que corre tras la extraccion.
+export interface AnalysisJobData {
   contratoId: string;
   organizationId: string;
 }
@@ -46,6 +53,11 @@ export const extractQueue = new Queue<ExtractJobData>(QUEUE_EXTRACT, {
 });
 
 export const embedQueue = new Queue<EmbedJobData>(QUEUE_EMBED, {
+  connection: queueConnection,
+  defaultJobOptions: defaultJobOpts,
+});
+
+export const analysisQueue = new Queue<AnalysisJobData>(QUEUE_ANALYSIS, {
   connection: queueConnection,
   defaultJobOptions: defaultJobOpts,
 });

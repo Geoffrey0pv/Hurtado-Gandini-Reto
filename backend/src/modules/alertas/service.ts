@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { colaboradores, contratos } from "../../db/schema.js";
 import { analizarContrato } from "../../rules/analisis.js";
+import { alertaSeguridadSocial } from "../../rules/alertas.js";
 
 export async function getAlertasOrg(orgId: string) {
   const rows = await db
@@ -77,6 +78,23 @@ export async function getAlertasOrg(orgId: string) {
         tipo: "JORNADA",
       });
     }
+  }
+
+  // ── Seguridad social: obligacion mensual a nivel ORGANIZACION (una sola vez,
+  // no por contrato). Solo se anexa si hay algo accionable este mes.
+  const ss = alertaSeguridadSocial();
+  if (ss.severidad !== "OK") {
+    result.push({
+      contratoId: "",
+      colaboradorId: "",
+      nombre: "Toda la compania",
+      cedula: "",
+      cargo: null,
+      severidad: ss.severidad === "CRITICA" ? "alta" : "media",
+      motivo: ss.mensaje,
+      tipo: ss.tipo,
+      plazo: ss.diasRestantes != null ? String(ss.diasRestantes) : undefined,
+    });
   }
 
   return result;

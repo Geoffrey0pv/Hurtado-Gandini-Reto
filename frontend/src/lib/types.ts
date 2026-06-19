@@ -125,6 +125,49 @@ export interface BackendAlerta {
   plazo?: string;
 }
 
+// Resultado del analisis determinista por contrato (GET /contratos/:id/analisis).
+export interface ConceptoLiquidacion {
+  concepto: string;
+  valor: number;
+  formula: string;
+  baseLegal: string;
+}
+
+export interface AnalisisJornada {
+  aplica?: false;
+  motivo?: string;
+  horasSemana?: number;
+  maxLegal?: number;
+  cumple?: boolean;
+  baseLegal?: string;
+  mensaje?: string;
+}
+
+export interface AnalisisLiquidacion {
+  aplica?: false;
+  motivo?: string;
+  diasTrabajados?: number;
+  conceptos?: ConceptoLiquidacion[];
+  total?: number;
+  indemnizacionEstimada?: ConceptoLiquidacion;
+}
+
+export interface AnalisisAlerta {
+  tipo: string;
+  severidad: "OK" | "INFO" | "ADVERTENCIA" | "CRITICA";
+  diasRestantes: number | null;
+  mensaje: string;
+  baseLegal?: string;
+}
+
+export interface AnalisisContrato {
+  generadoEn: string;
+  metodo: string; // "REGLA_DETERMINISTA"
+  jornada: AnalisisJornada;
+  liquidacion: AnalisisLiquidacion;
+  alertas: AnalisisAlerta[];
+}
+
 export interface BackendAuditLog {
   id: string;
   organizationId: string;

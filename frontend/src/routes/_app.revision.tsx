@@ -6,6 +6,7 @@ import { LegalWarningBanner } from "@/components/common/LegalWarningBanner";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { useContratos } from "@/hooks/useContratos";
+import { RagChat } from "@/components/rag/RagChat";
 import type { BackendContrato } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -25,7 +26,7 @@ function RevisionPage() {
       <PageHeader
         eyebrow="Human-in-the-loop"
         title="Revisión jurídica"
-        description="Cola de salidas asistidas por IA pendientes de aprobación humana documentada."
+        description="Revisión jurídica de contratos con detección de riesgos y aprobación humana documentada."
       />
 
       <div className="mx-auto max-w-[1440px] space-y-6 px-4 pb-16 sm:px-6 lg:px-10">
@@ -68,29 +69,19 @@ function RevisionPage() {
           </aside>
 
           {selected ? (
-          <section className="rounded-2xl border border-border bg-card">
+          <section className="flex h-[calc(100vh-220px)] min-h-[520px] flex-col rounded-2xl border border-border bg-card">
             <header className="border-b border-border p-6">
               <p className="text-[11px] uppercase tracking-wider text-primary">{selected.tipoContrato ?? "Contrato"}</p>
-              <h2 className="mt-1 font-display text-2xl text-foreground">Revisión de extracción</h2>
+              <h2 className="mt-1 font-display text-2xl text-foreground">{selected.fileKey.split("/").pop()}</h2>
               <p className="mt-1 text-xs text-muted-foreground">Creado el {selected.createdAt.slice(0, 10)}</p>
             </header>
 
-            <div className="grid gap-4 p-6 md:grid-cols-2">
-              <Pane title="Datos extraídos por IA" tone="muted">
-                <pre className="overflow-auto text-xs text-muted-foreground">{JSON.stringify(selected.extracted, null, 2)}</pre>
-              </Pane>
-              <Pane title="Versión aprobada por abogado" tone="primary">
-                <p className="text-sm leading-relaxed text-foreground">
-                  Revisa los datos extraídos y aprueba para crear o actualizar el perfil del colaborador.
-                </p>
-                <div className="mt-4 rounded-xl border border-dashed border-border-strong/60 bg-background/40 p-3 text-xs text-muted-foreground">
-                  Pendiente de aprobación jurídica
-                </div>
-              </Pane>
+            <div className="min-h-0 flex-1 p-4">
+              <RagChat key={selected.id} contratoId={selected.id} />
             </div>
 
-            <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-border p-6">
-              <Button variant="ghost" className="text-muted-foreground hover:text-foreground" onClick={() => toast("Rechazado")}>
+            <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-border p-4">
+              <Button variant="ghost" className="text-muted-foreground hover:text-foreground" onClick={() => toast("Marcado como revisado sin aprobar")}>
                 <X className="mr-1 h-4 w-4" />Rechazar
               </Button>
               <Button variant="outline" className="rounded-full border-border-strong/60" onClick={() => toast("Apertura en editor jurídico")}>
@@ -113,12 +104,3 @@ function RevisionPage() {
   );
 }
 
-function Pane({ title, tone, children }: { title: string; tone: "muted" | "primary"; children: React.ReactNode }) {
-  return (
-    <div className={cn("rounded-2xl border p-5",
-      tone === "primary" ? "border-primary/30 bg-primary/8" : "border-border bg-background/40")}>
-      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{title}</p>
-      <div className="mt-3">{children}</div>
-    </div>
-  );
-}
