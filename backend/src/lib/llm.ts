@@ -106,6 +106,39 @@ export async function generate(prompt: string, complex = true): Promise<string> 
   return res.response;
 }
 
+// ── Generacion estructurada (RAG con schema Zod) ──────────────────────
+// Misma doble red de seguridad que extractContract: grammar de Ollama +
+// validacion Zod. `mockFallback` se usa en LLM_MODE=mock para tests e2e.
+export interface StructuredResult<T> { data: T; model: string }
+
+export async function generateStructured<T>(params: {
+  systemPrompt: string;
+  userPrompt: string;
+  schema: z.ZodType<T>;
+  mockFallback: T;
+  complex?: boolean;
+}): Promise<StructuredResult<T>> {
+  const { systemPrompt, userPrompt, schema, mockFallback, complex = true } = params;
+  const model = complex ? env.OLLAMA_MODEL_COMPLEX : env.OLLAMA_MODEL;
+
+  if (env.LLM_MODE === "mock") {
+    return { data: mockFallback, model: `mock:${model}` };
+  }
+
+  const format = stripUnsupported(z.toJSONSchema(schema)) as Record<string, unknown>;
+  const res = await ollama.chat({
+    model,
+    format,
+    options: { temperature: 0 },
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+  });
+  const data = schema.parse(JSON.parse(res.message.content));
+  return { data, model };
+}
+
 // ── Mocks deterministas ───────────────────────────────────────────────
 function mockExtraction(text: string): Extraction {
   const t = text.toLowerCase();
