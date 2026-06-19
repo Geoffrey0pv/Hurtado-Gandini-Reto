@@ -1,6 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { FileText, Loader2, UploadCloud } from "lucide-react";
+import {
+  Banknote,
+  Briefcase,
+  CalendarCheck,
+  CalendarDays,
+  ExternalLink,
+  FileSignature,
+  FileText,
+  IdCard,
+  Loader2,
+  Clock,
+  UploadCloud,
+  User,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -23,7 +36,12 @@ import {
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { ApiError } from "@/lib/api";
-import { useContratos, useIngestionJob, useUploadContrato } from "@/hooks/useContratos";
+import {
+  useContrato,
+  useContratos,
+  useIngestionJob,
+  useUploadContrato,
+} from "@/hooks/useContratos";
 import { useColaboradores } from "@/hooks/useColaboradores";
 import type { BackendContrato } from "@/lib/types";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -214,6 +232,153 @@ function UploadDocumentoDialog() {
   );
 }
 
+// ── Detalle del documento: tarjeta con datos extraídos + visor del PDF ──────
+const TIPO_LABEL: Record<string, string> = {
+  TERMINO_FIJO: "Término fijo",
+  TERMINO_INDEFINIDO: "Término indefinido",
+  OBRA_LABOR: "Obra o labor",
+  PRESTACION_SERVICIOS: "Prestación de servicios",
+  APRENDIZAJE: "Aprendizaje",
+  OTRO: "Otro",
+};
+
+interface ExtractedData {
+  tipoContrato?: string | null;
+  nombreColaborador?: string | null;
+  cedula?: string | null;
+  cargo?: string | null;
+  fechaInicio?: string | null;
+  fechaFin?: string | null;
+  salario?: number | null;
+  jornadaHorasSemana?: number | null;
+  confianza?: number | null;
+}
+
+function formatCOP(n: number): string {
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+function DataField({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof User;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-background/40 p-3">
+      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </div>
+      <p className="mt-1 text-sm text-foreground">{value || "—"}</p>
+    </div>
+  );
+}
+
+function DocumentoDetail({ contrato }: { contrato: BackendContrato }) {
+  // Trae el detalle con la URL prefirmada de MinIO (se genera bajo demanda).
+  const { data: detail } = useContrato(contrato.id);
+  const c = detail ?? contrato;
+  const fileUrl = detail?.fileUrl ?? null;
+  const fileName = c.fileKey.split("/").pop();
+
+  const ex = (c.extracted ?? {}) as ExtractedData;
+  const tipo = ex.tipoContrato ?? c.tipoContrato;
+  const salarioNum =
+    ex.salario ?? (c.salario != null ? Number(c.salario) : null);
+  const jornada = ex.jornadaHorasSemana ?? c.jornadaHorasSemana;
+  const confianza = typeof ex.confianza === "number" ? Math.round(ex.confianza * 100) : null;
+  const hasData = c.extracted != null;
+
+  return (
+    <div>
+      <p className="text-[11px] uppercase tracking-[0.22em] text-primary">
+        {tipo ? (TIPO_LABEL[tipo] ?? tipo) : "Contrato"}
+      </p>
+      <h2 className="mt-2 break-all font-display text-2xl text-foreground">{fileName}</h2>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Cargado el {c.createdAt.slice(0, 10)}
+      </p>
+
+      {/* Visor del archivo en MinIO */}
+      <div className="mt-4">
+        {fileUrl ? (
+          <a href={fileUrl} target="_blank" rel="noreferrer">
+            <Button variant="outline" className="w-full rounded-full">
+              <ExternalLink className="mr-2 h-4 w-4" />Ver archivo (PDF)
+            </Button>
+          </a>
+        ) : (
+          <Button variant="outline" className="w-full rounded-full" disabled>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />Generando enlace…
+          </Button>
+        )}
+      </div>
+
+      {/* Datos extraídos por IA */}
+      <div className="mt-6">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">
+            Datos extraídos por IA
+          </p>
+          {confianza != null && (
+            <StatusBadge tone={confianza >= 70 ? "success" : "warning"}>
+              Confianza {confianza}%
+            </StatusBadge>
+          )}
+        </div>
+
+        {hasData ? (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <DataField icon={User} label="Colaborador" value={ex.nombreColaborador ?? ""} />
+            <DataField icon={IdCard} label="Cédula" value={ex.cedula ?? ""} />
+            <DataField icon={Briefcase} label="Cargo" value={ex.cargo ?? ""} />
+            <DataField
+              icon={FileSignature}
+              label="Tipo de contrato"
+              value={tipo ? (TIPO_LABEL[tipo] ?? tipo) : ""}
+            />
+            <DataField icon={CalendarDays} label="Fecha de inicio" value={ex.fechaInicio ?? c.fechaInicio ?? ""} />
+            <DataField
+              icon={CalendarCheck}
+              label="Fecha de fin"
+              value={ex.fechaFin ?? c.fechaFin ?? "Indefinido"}
+            />
+            <DataField
+              icon={Banknote}
+              label="Salario"
+              value={salarioNum != null ? formatCOP(salarioNum) : ""}
+            />
+            <DataField
+              icon={Clock}
+              label="Jornada"
+              value={jornada != null ? `${jornada} h/semana` : ""}
+            />
+          </div>
+        ) : (
+          <p className="rounded-xl border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+            {c.status === "FAILED"
+              ? "La extracción falló para este documento."
+              : "Aún no hay datos extraídos. El documento sigue en procesamiento."}
+          </p>
+        )}
+
+        <p className="mt-4 text-[11px] text-muted-foreground">
+          La extracción asistida por IA siempre debe validarse humanamente antes de
+          tener efectos jurídicos.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function DocumentosPage() {
   const { data: contratos = [], isLoading } = useContratos();
   const [filter, setFilter] = useState<(typeof filters)[number]>("Todos");
@@ -287,21 +452,9 @@ function DocumentosPage() {
       </div>
 
       <Sheet open={!!open} onOpenChange={(o) => !o && setOpen(null)}>
-        <SheetContent className="w-full bg-card sm:max-w-xl">
+        <SheetContent className="w-full overflow-y-auto bg-card sm:max-w-xl">
           <SheetTitle className="sr-only">Detalle de documento</SheetTitle>
-          {open && (
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-primary">{open.tipoContrato ?? "Contrato"}</p>
-              <h2 className="mt-2 font-display text-2xl text-foreground">{open.fileKey.split("/").pop()}</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Cargado el {open.createdAt.slice(0, 10)}</p>
-              {open.extracted != null && (
-                <div className="mt-6">
-                  <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Datos extraídos</p>
-                  <pre className="overflow-auto rounded-xl border border-border bg-background/40 p-3 text-xs text-muted-foreground">{JSON.stringify(open.extracted, null, 2)}</pre>
-                </div>
-              )}
-            </div>
-          )}
+          {open && <DocumentoDetail contrato={open} />}
         </SheetContent>
       </Sheet>
     </div>
