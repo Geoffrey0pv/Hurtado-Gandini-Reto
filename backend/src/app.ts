@@ -12,7 +12,6 @@ import { authRoutes } from "./modules/users/routes.js";
 import { organizationRoutes } from "./modules/organizations/routes.js";
 import { colaboradoresRoutes } from "./modules/colaboradores/routes.js";
 import { contratosRoutes } from "./modules/contratos/routes.js";
-<<<<<<< HEAD:backend/src/app.ts
 import { areasRoutes } from "./modules/areas/routes.js";
 import { timesheetRoutes } from "./modules/timesheet/routes.js";
 import { documentosRoutes } from "./modules/documentos/routes.js";
@@ -21,9 +20,7 @@ import { novedadesRoutes } from "./modules/novedades/routes.js";
 import { alertasRoutes } from "./modules/alertas/routes.js";
 import { auditLogsRoutes } from "./modules/audit-logs/routes.js";
 import { dashboardRoutes } from "./modules/dashboard/routes.js";
-=======
 import { ragRoutes, auditLogRoutes } from "./modules/rag/routes.js";
->>>>>>> d6ed80d5e848dba4fca53a9c0a519a65965884a0:src/app.ts
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -86,7 +83,6 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(organizationRoutes, { prefix: "/organizations" });
   await app.register(colaboradoresRoutes, { prefix: "/colaboradores" });
   await app.register(contratosRoutes, { prefix: "/contratos" });
-<<<<<<< HEAD:backend/src/app.ts
   await app.register(areasRoutes, { prefix: "/areas" });
   await app.register(timesheetRoutes, { prefix: "/timesheet" });
   await app.register(documentosRoutes, { prefix: "/documentos" });
@@ -95,10 +91,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(alertasRoutes, { prefix: "/alertas" });
   await app.register(auditLogsRoutes, { prefix: "/audit-logs" });
   await app.register(dashboardRoutes, { prefix: "/dashboard" });
-=======
   await app.register(ragRoutes, { prefix: "/rag" });
   await app.register(auditLogRoutes, { prefix: "/audit-logs" });
->>>>>>> d6ed80d5e848dba4fca53a9c0a519a65965884a0:src/app.ts
 
   return app;
 }
