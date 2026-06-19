@@ -1237,11 +1237,11 @@ function DisciplinarioTab({ empleado: e }: { empleado: Employee }) {
             </header>
             <ol className="space-y-3">
               {ETAPAS.map((et, idx) => {
-                const done = selected.etapas[et.key];
+                const done = selected.etapas?.[et.key] ?? false;
                 return (
                   <li key={et.key}>
                     <button
-                      onClick={() => toggleEtapa(selected.id, et.key)}
+                      onClick={() => toggleEtapa(selected.id, et.key, !done)}
                       className="flex w-full items-center gap-3 rounded-lg px-2 py-1 text-left hover:bg-background/40"
                     >
                       <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${done ? "border-emerald-400 bg-emerald-400/20 text-emerald-300" : "border-border text-muted-foreground"}`}>
@@ -1899,7 +1899,7 @@ function CalendarioTab({ empleado: e }: { empleado: Employee }) {
                       </div>
                       {ev.tipo === "novedad" && ev.novedadId && (
                         <button
-                          onClick={() => { remove(ev.novedadId!); toast.message("Novedad eliminada"); }}
+                          onClick={() => { deleteNovedad.mutate(ev.novedadId!); toast.message("Novedad eliminada"); }}
                           className="grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                           aria-label="Eliminar novedad"
                         >
@@ -1957,7 +1957,7 @@ function CalendarioTab({ empleado: e }: { empleado: Employee }) {
           <RegistrarNovedadForm
             empleadoId={e.id}
             vacDisponibles={vacDisponibles}
-            onAdd={add}
+            onAdd={(data) => createNovedad.mutate(data)}
           />
         </div>
       </div>
@@ -1975,19 +1975,16 @@ function CalendarioTab({ empleado: e }: { empleado: Employee }) {
               <li key={n.id} className="grid grid-cols-[1fr_auto] items-center gap-3 py-3 text-sm">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <StatusBadge tone={NOVEDAD_TONE[n.tipo]}>{NOVEDAD_LABEL[n.tipo]}</StatusBadge>
-                    <span className="text-foreground">{formatDate(n.desde)} → {formatDate(n.hasta)}</span>
-                    <span className="text-xs text-muted-foreground">({diasEntre(n.desde, n.hasta)} días)</span>
+                    <StatusBadge tone={(NOVEDAD_TONE as Record<string, "primary" | "warning" | "muted" | "success">)[n.tipo] ?? "muted"}>
+                      {(NOVEDAD_LABEL as Record<string, string>)[n.tipo] ?? n.tipo}
+                    </StatusBadge>
+                    <span className="text-foreground">{formatDate(n.fecha)}</span>
+                    {n.origen && <span className="text-xs text-muted-foreground">({n.origen})</span>}
                   </div>
-                  {n.nota && <p className="mt-1 text-xs text-muted-foreground">{n.nota}</p>}
-                  {n.documento && (
-                    <p className="mt-1 inline-flex items-center gap-1 text-xs text-primary">
-                      <Paperclip className="h-3 w-3" /> {n.documento.nombre}
-                    </p>
-                  )}
+                  {n.descripcion && <p className="mt-1 text-xs text-muted-foreground">{n.descripcion}</p>}
                 </div>
                 <button
-                  onClick={() => { remove(n.id); toast.message("Novedad eliminada"); }}
+                  onClick={() => { deleteNovedad.mutate(n.id); toast.message("Novedad eliminada"); }}
                   className="grid h-7 w-7 place-items-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   aria-label="Eliminar"
                 >
@@ -2007,7 +2004,7 @@ function RegistrarNovedadForm({
 }: {
   empleadoId: string;
   vacDisponibles: number;
-  onAdd: ReturnType<typeof useNovedades>["add"];
+  onAdd: (data: { colaboradorId: string; tipo: NovedadTipo; fecha: string; descripcion?: string }) => void;
 }) {
   const hoy = new Date().toISOString().slice(0, 10);
   const [tipo, setTipo] = useState<NovedadTipo>("incapacidad");
@@ -2033,13 +2030,16 @@ function RegistrarNovedadForm({
       toast.error("La incapacidad requiere documento soporte (EPS/ARL).");
       return;
     }
+    const detalle = [
+      nota.trim() || null,
+      `Del ${desde} al ${hasta} (${dias} ${dias === 1 ? "día" : "días"})`,
+      archivo ? `Soporte: ${archivo.name}` : null,
+    ].filter(Boolean).join(" · ");
     onAdd({
-      empleadoId,
+      colaboradorId: empleadoId,
       tipo,
-      desde,
-      hasta,
-      nota: nota.trim() || undefined,
-      documento: archivo ? { nombre: archivo.name, size: archivo.size } : undefined,
+      fecha: desde,
+      descripcion: detalle || undefined,
     });
     toast.success(`${NOVEDAD_LABEL[tipo]} registrada · ${dias} días`);
     setNota("");
