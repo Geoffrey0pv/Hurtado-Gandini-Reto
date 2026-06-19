@@ -16,9 +16,11 @@ import { MobileFullscreenMenu } from "./MobileFullscreenMenu";
 const links = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/organizacion", label: "Organización" },
+  { to: "/obligaciones", label: "Obligaciones" },
   { to: "/documentos", label: "Documentos" },
   { to: "/alertas", label: "Alertas" },
   { to: "/revision", label: "Revisión jurídica" },
+  { to: "/auditoria", label: "Auditoría" },
 ] as const;
 
 export function InstitutionalTopbar() {
