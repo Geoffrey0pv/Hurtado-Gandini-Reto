@@ -1,6 +1,7 @@
 // src/app.ts — Construccion de la instancia Fastify (compartible por tests).
 import Fastify, { type FastifyInstance } from "fastify";
 import jwt from "@fastify/jwt";
+import multipart from "@fastify/multipart";
 import { sql } from "drizzle-orm";
 import { ZodError } from "zod";
 import { env } from "./config/env.js";
@@ -9,6 +10,7 @@ import "./shared/types.js"; // augmentaciones (authenticate, payload JWT)
 import { authRoutes } from "./modules/users/routes.js";
 import { organizationRoutes } from "./modules/organizations/routes.js";
 import { colaboradoresRoutes } from "./modules/colaboradores/routes.js";
+import { contratosRoutes } from "./modules/contratos/routes.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -18,6 +20,11 @@ export async function buildApp(): Promise<FastifyInstance> {
           ? { target: "pino-pretty", options: { translateTime: "HH:MM:ss", ignore: "pid,hostname" } }
           : undefined,
     },
+  });
+
+  // ── Subida de archivos (streaming) ──────────────────────────────────
+  await app.register(multipart, {
+    limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB por PDF
   });
 
   // ── Auth (JWT) ──────────────────────────────────────────────────────
@@ -59,6 +66,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(authRoutes, { prefix: "/auth" });
   await app.register(organizationRoutes, { prefix: "/organizations" });
   await app.register(colaboradoresRoutes, { prefix: "/colaboradores" });
+  await app.register(contratosRoutes, { prefix: "/contratos" });
 
   return app;
 }

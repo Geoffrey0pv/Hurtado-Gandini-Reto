@@ -13,6 +13,19 @@ const EnvSchema = z.object({
   JWT_SECRET: z.string().min(8),
   PORT: z.coerce.number().default(3000),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+
+  // ── Storage (MinIO) ──
+  MINIO_BUCKET: z.string().default("contracts"),
+
+  // ── LLM (Ollama) ──
+  // "ollama" = inferencia real; "mock" = extraccion/embeddings deterministas
+  // para correr el pipeline end-to-end sin modelos descargados.
+  LLM_MODE: z.enum(["ollama", "mock"]).default("ollama"),
+  OLLAMA_MODEL: z.string().default("llama3:8b-instruct-q4_K_M"),
+  OLLAMA_MODEL_COMPLEX: z.string().default("qwen2.5:14b-instruct-q4_K_M"),
+  EMBED_MODEL: z.string().default("bge-m3"),
+  // Dimension del vector. bge-m3=1024 (debe coincidir con el schema de la tabla).
+  EMBED_DIM: z.coerce.number().default(1024),
 });
 
 const parsed = EnvSchema.safeParse(process.env);

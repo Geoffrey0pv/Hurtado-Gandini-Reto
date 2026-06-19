@@ -40,3 +40,28 @@ export type UpdateColaboradorInput = z.infer<typeof UpdateColaboradorSchema>;
 
 // UUID en params de ruta.
 export const IdParamSchema = z.object({ id: z.uuid() });
+
+// ── Salida estructurada del LLM (extraccion de contrato) ──────────────
+// Se pasa como JSON Schema al parametro `format` de Ollama y se vuelve a
+// validar la respuesta con este mismo schema (doble red de seguridad).
+// Todos los campos son nullable: el LLM debe poner null si no lo halla,
+// nunca inventar. Las columnas tipadas del contrato solo se llenan con lo
+// que pase esta validacion.
+export const CONTRACT_TYPES = [
+  "TERMINO_FIJO", "TERMINO_INDEFINIDO", "OBRA_LABOR",
+  "PRESTACION_SERVICIOS", "APRENDIZAJE", "OTRO",
+] as const;
+
+export const ExtractionSchema = z.object({
+  tipoContrato: z.enum(CONTRACT_TYPES).nullable(),
+  nombreColaborador: z.string().nullable(),
+  cedula: z.string().nullable(),
+  cargo: z.string().nullable(),
+  fechaInicio: isoDate.nullable(),
+  fechaFin: isoDate.nullable(),
+  salario: z.number().nonnegative().nullable(),
+  jornadaHorasSemana: z.number().int().positive().nullable(),
+  // Confianza global 0-1 que reporta el modelo sobre su propia extraccion.
+  confianza: z.number().min(0).max(1).nullable(),
+});
+export type Extraction = z.infer<typeof ExtractionSchema>;

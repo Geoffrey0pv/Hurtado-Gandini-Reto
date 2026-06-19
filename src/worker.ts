@@ -1,14 +1,18 @@
-// src/worker.ts — Bootstrap del worker BullMQ (proceso separado)
-// Hora 0-1: solo arranca y confirma conexion. La logica de ingestion
-// (PDF -> texto -> extraccion -> embeddings) se implementa en la Hora 4-8.
+// src/worker.ts — Bootstrap del worker BullMQ (proceso separado de la API).
 import { env } from "./config/env.js";
+import { startWorkers } from "./workers/ingestion.worker.js";
 
-async function start() {
-  console.log("[worker] arrancando worker de ingestion...");
-  console.log(`[worker] Redis: ${env.REDIS_URL}`);
-  console.log(`[worker] Ollama: ${env.OLLAMA_HOST}`);
-  // TODO (Hora 4-8): registrar el Worker de BullMQ para la cola "ingest".
-  console.log("[worker] listo (placeholder, sin colas registradas todavia).");
+console.log("[worker] arrancando workers de ingestion...");
+console.log(`[worker] Redis: ${env.REDIS_URL} | Ollama: ${env.OLLAMA_HOST} | LLM_MODE: ${env.LLM_MODE}`);
+
+const { extractWorker, embedWorker } = startWorkers();
+console.log("[worker] listo. Colas: extract (concurrency 1), embed (concurrency 3).");
+
+// Shutdown limpio para no dejar jobs a medias.
+async function shutdown(signal: string) {
+  console.log(`[worker] ${signal} recibido, cerrando workers...`);
+  await Promise.allSettled([extractWorker.close(), embedWorker.close()]);
+  process.exit(0);
 }
-
-start();
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
