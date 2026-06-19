@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiUpload } from "@/lib/api";
-import type { BackendContrato } from "@/lib/types";
+import type { AnalisisContrato, BackendContrato } from "@/lib/types";
 
 const KEY = ["contratos"] as const;
 
@@ -34,8 +34,9 @@ export function useContrato(id: string) {
 export function useContratoAnalisis(id: string, enabled = false) {
   return useQuery({
     queryKey: [...KEY, id, "analisis"],
-    queryFn: () => apiGet<unknown>(`/contratos/${id}/analisis`),
+    queryFn: () => apiGet<AnalisisContrato>(`/contratos/${id}/analisis`),
     enabled: enabled && !!id,
+    staleTime: 5 * 60 * 1000, // el endpoint deja audit log: evitamos refetch por montaje
   });
 }
 

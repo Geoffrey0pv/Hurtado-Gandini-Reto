@@ -1,37 +1,35 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
-import { CalendarDays, Check, CheckCheck, RotateCcw, Wallet } from "lucide-react";
-import { toast } from "sonner";
+import {
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
+  Clock,
+  Loader2,
+  Scale,
+  ShieldCheck,
+  Wallet,
+} from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { EmptyState } from "@/components/common/EmptyState";
-import { useEmployees } from "@/lib/store";
-import { useObligaciones } from "@/lib/obligaciones-store";
-import {
-  avisosFrecuencia,
-  diasHabilesHasta,
-  nivelAviso,
-  proximasObligaciones,
-  type Frecuencia,
-  type NivelAviso,
-} from "@/lib/obligaciones";
+import { useContratos, useContratoAnalisis } from "@/hooks/useContratos";
+import { useColaboradores } from "@/hooks/useColaboradores";
+import { useAlertas } from "@/hooks/useAlertas";
+import type { AnalisisAlerta, BackendColaborador, BackendContrato } from "@/lib/types";
 
 export const Route = createFileRoute("/_app/obligaciones")({
   head: () => ({ meta: [{ title: "Obligaciones · LaborApp" }] }),
   component: ObligacionesCompaniaPage,
 });
 
-type TareaCompania = {
-  key: string; // `${tipo}:${fecha}`
-  tipo: string;
-  fecha: string;
-  label: string;
-  detalle?: string;
-  frecuencia: Frecuencia;
-  ids: string[]; // ids por colaborador
-  colaboradores: number;
-  montoTotal: number;
-  conMonto: boolean;
+const TIPO_LABEL: Record<string, string> = {
+  TERMINO_FIJO: "Término fijo",
+  TERMINO_INDEFINIDO: "Término indefinido",
+  OBRA_LABOR: "Obra o labor",
+  PRESTACION_SERVICIOS: "Prestación de servicios",
+  APRENDIZAJE: "Aprendizaje",
+  OTRO: "Otro",
 };
 
 function formatCOP(n: number) {
@@ -42,230 +40,212 @@ function formatCOP(n: number) {
   }).format(n);
 }
 
-function formatFecha(iso: string) {
-  return new Date(iso + "T00:00:00").toLocaleDateString("es-CO", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function agrupar(tareas: ReturnType<typeof proximasObligaciones>): Map<string, TareaCompania> {
-  const map = new Map<string, TareaCompania>();
-  for (const o of tareas) {
-    const key = `${o.tipo}:${o.fecha}`;
-    const prev = map.get(key);
-    if (prev) {
-      prev.ids.push(o.id);
-      prev.colaboradores += 1;
-      if (o.monto != null) {
-        prev.montoTotal += o.monto;
-        prev.conMonto = true;
-      }
-    } else {
-      map.set(key, {
-        key,
-        tipo: o.tipo,
-        fecha: o.fecha,
-        label: o.label,
-        detalle: o.detalle,
-        frecuencia: o.frecuencia,
-        ids: [o.id],
-        colaboradores: 1,
-        montoTotal: o.monto ?? 0,
-        conMonto: o.monto != null,
-      });
-    }
-  }
-  return map;
+function sevTone(sev: AnalisisAlerta["severidad"]): "warning" | "primary" | "muted" {
+  if (sev === "CRITICA") return "warning";
+  if (sev === "ADVERTENCIA") return "primary";
+  return "muted";
 }
 
 function ObligacionesCompaniaPage() {
-  const { employees, isLoading } = useEmployees();
+  const { data: contratos = [], isLoading } = useContratos();
+  const { data: colaboradores = [] } = useColaboradores();
+  const { data: alertas = [] } = useAlertas();
 
-  const { mensuales, anuales } = useMemo(() => {
-    const activos = employees.filter((e) => e.estadoVinculacion === "activo");
-    const todas = activos.flatMap((e) => proximasObligaciones(e, 24));
-    const grupos = [...agrupar(todas).values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
-    return {
-      mensuales: grupos.filter((g) => g.frecuencia === "mensual").slice(0, 12),
-      anuales: grupos.filter((g) => g.frecuencia === "anual").slice(0, 16),
-    };
-  }, [employees]);
+  const colMap = useMemo(() => {
+    const m = new Map<string, BackendColaborador>();
+    for (const c of colaboradores) m.set(c.id, c);
+    return m;
+  }, [colaboradores]);
 
-  if (!isLoading && employees.length === 0) {
-    return (
-      <div>
-        <PageHeader
-          eyebrow="Cumplimiento"
-          title="Obligaciones de la compañía"
-          description="Marca como completadas las obligaciones recurrentes para todos los colaboradores a la vez."
-        />
-        <div className="mx-auto max-w-[1440px] px-4 pb-16 sm:px-6 lg:px-10">
-          <EmptyState title="Sin colaboradores" description="Aún no hay colaboradores activos para generar obligaciones." />
-        </div>
-      </div>
-    );
-  }
+  const procesados = contratos.filter((c) => c.status === "DONE");
+
+  const criticas = alertas.filter((a) => a.severidad === "alta").length;
+  const medias = alertas.filter((a) => a.severidad === "media").length;
 
   return (
     <div>
       <PageHeader
         eyebrow="Cumplimiento"
         title="Obligaciones de la compañía"
-        description="Cada tarea recurrente aparece una sola vez. Márcala como completada para todos los colaboradores en un solo clic."
+        description="Cálculo determinista (sin IA) sobre los contratos cargados: prestaciones, jornada legal y alertas. Cada cifra cita su base legal y queda trazada en auditoría."
       />
 
-      <div className="mx-auto grid max-w-[1440px] gap-5 px-4 pb-16 sm:px-6 lg:grid-cols-2 lg:px-10">
-        <TareaSection
-          title="Obligaciones mensuales"
-          icon={<CalendarDays className="h-4 w-4" />}
-          tareas={mensuales}
-          hint="Avisos automáticos 5, 3 y 1 día hábil antes."
-        />
-        <TareaSection
-          title="Obligaciones anuales / periódicas"
-          icon={<Wallet className="h-4 w-4" />}
-          tareas={anuales}
-          hint="Avisos automáticos 30, 15 y 7 días hábiles antes."
-        />
+      <div className="mx-auto max-w-[1440px] space-y-6 px-4 pb-16 sm:px-6 lg:px-10">
+        {/* Resumen de alertas de cumplimiento */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <SummaryCard label="Alertas críticas" value={criticas} icon={<AlertTriangle className="h-4 w-4" />} tone="high" />
+          <SummaryCard label="Alertas medias" value={medias} icon={<CalendarClock className="h-4 w-4" />} tone="medium" />
+          <SummaryCard label="Contratos analizados" value={procesados.length} icon={<ShieldCheck className="h-4 w-4" />} tone="low" />
+        </div>
+
+        {isLoading ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">Cargando contratos…</p>
+        ) : procesados.length === 0 ? (
+          <EmptyState
+            title="Sin contratos procesados"
+            description="Carga un contrato en la sección Documentos. Al terminar la extracción, aquí verás el cálculo determinista de obligaciones."
+          />
+        ) : (
+          <div className="space-y-4">
+            {procesados.map((c) => (
+              <ContratoCompliance key={c.id} contrato={c} colaborador={colMap.get(c.colaboradorId)} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function TareaSection({
-  title,
+function SummaryCard({
+  label,
+  value,
   icon,
-  tareas,
-  hint,
+  tone,
 }: {
-  title: string;
+  label: string;
+  value: number;
   icon: React.ReactNode;
-  tareas: TareaCompania[];
-  hint: string;
+  tone: "high" | "medium" | "low";
 }) {
-  const { isDone, setManyDone } = useObligaciones();
-  const hoy = new Date();
-
-  const hechas = tareas.filter((t) => t.ids.every((id) => isDone(id))).length;
-
-  function completarTodo() {
-    const ids = tareas.flatMap((t) => t.ids);
-    setManyDone(ids, true);
-    toast.success(`${tareas.length} obligaciones marcadas como completadas para toda la compañía.`);
-  }
-
+  const border =
+    tone === "high" ? "border-risk-high/30" : tone === "medium" ? "border-risk-medium/30" : "border-risk-low/30";
   return (
-    <section className="rounded-2xl border border-border bg-card p-5">
-      <header className="mb-1 flex items-center justify-between gap-2 text-foreground">
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">{icon}</span>
-          <h3 className="text-sm font-medium">{title}</h3>
-        </div>
-        <StatusBadge tone={hechas === tareas.length && tareas.length > 0 ? "success" : "muted"}>
-          {hechas}/{tareas.length}
-        </StatusBadge>
-      </header>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] text-muted-foreground">{hint}</p>
-        {tareas.length > 0 && (
-          <button
-            type="button"
-            onClick={completarTodo}
-            className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/25"
-          >
-            <CheckCheck className="h-3.5 w-3.5" /> Completar todas
-          </button>
-        )}
+    <div className={`rounded-2xl border bg-card p-5 ${border}`}>
+      <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+        {icon}
+        {label}
       </div>
-
-      {tareas.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Sin obligaciones próximas.</p>
-      ) : (
-        <ul className="space-y-2">
-          {tareas.map((t) => {
-            const dh = diasHabilesHasta(new Date(t.fecha + "T00:00:00"), hoy);
-            const nivel = nivelAviso(dh, t.frecuencia);
-            const done = t.ids.every((id) => isDone(id));
-            return (
-              <TareaRow
-                key={t.key}
-                tarea={t}
-                dh={dh}
-                nivel={nivel}
-                done={done}
-                onToggle={() => setManyDone(t.ids, !done)}
-              />
-            );
-          })}
-        </ul>
-      )}
-    </section>
+      <p className="mt-2 font-display text-3xl text-foreground">{value}</p>
+    </div>
   );
 }
 
-function TareaRow({
-  tarea,
-  dh,
-  nivel,
-  done,
-  onToggle,
+function ContratoCompliance({
+  contrato,
+  colaborador,
 }: {
-  tarea: TareaCompania;
-  dh: number;
-  nivel: NivelAviso;
-  done: boolean;
-  onToggle: () => void;
+  contrato: BackendContrato;
+  colaborador?: BackendColaborador;
 }) {
-  const tone = nivel === "vencido" || nivel === "urgente" ? "warning" : nivel === "advertencia" ? "primary" : "muted";
-  const cuenta = dh < 0 ? `vencido hace ${Math.abs(dh)}d hábiles` : dh === 0 ? "vence hoy" : `en ${dh}d hábiles`;
-  const avisos = avisosFrecuencia(tarea.frecuencia);
+  const { data: analisis, isLoading } = useContratoAnalisis(contrato.id, true);
+
+  const nombre = colaborador?.nombre ?? "Colaborador";
+  const tipo = contrato.tipoContrato ? (TIPO_LABEL[contrato.tipoContrato] ?? contrato.tipoContrato) : "Contrato";
 
   return (
-    <li
-      className={`flex items-start justify-between gap-3 rounded-xl border bg-background/40 px-3 py-3 ${
-        done ? "border-emerald-400/40 bg-emerald-400/5" : "border-border"
-      }`}
-    >
-      <div className="flex min-w-0 items-start gap-3">
-        <span
-          className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border ${
-            done ? "border-emerald-400 bg-emerald-400/20 text-emerald-300" : "border-border bg-background"
-          }`}
-        >
-          {done && <Check className="h-3 w-3" />}
-        </span>
-        <div className="min-w-0">
-          <p className={`truncate text-sm ${done ? "text-muted-foreground line-through" : "text-foreground"}`}>
-            {tarea.label}
-          </p>
-          {tarea.detalle && <p className="truncate text-[11px] text-muted-foreground">{tarea.detalle}</p>}
-          <p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-            {tarea.colaboradores} colaborador{tarea.colaboradores === 1 ? "" : "es"} · avisos {avisos.join(" · ")} días hábiles antes
+    <section className="rounded-2xl border border-border bg-card p-5">
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          {colaborador ? (
+            <Link to="/colaboradores/$id" params={{ id: colaborador.id }} className="font-display text-lg text-foreground hover:underline">
+              {nombre}
+            </Link>
+          ) : (
+            <span className="font-display text-lg text-foreground">{nombre}</span>
+          )}
+          <p className="text-xs text-muted-foreground">
+            {tipo}
+            {colaborador?.cargo ? ` · ${colaborador.cargo}` : ""}
           </p>
         </div>
-      </div>
-      <div className="flex shrink-0 flex-col items-end gap-1 whitespace-nowrap">
-        <p className="text-xs text-foreground">{formatFecha(tarea.fecha)}</p>
-        {tarea.conMonto && <p className="text-[11px] text-muted-foreground">{formatCOP(tarea.montoTotal)}</p>}
-        {done ? <StatusBadge tone="success">hecho</StatusBadge> : <StatusBadge tone={tone}>{cuenta}</StatusBadge>}
-        <button
-          type="button"
-          onClick={onToggle}
-          className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-        >
-          {done ? (
-            <>
-              <RotateCcw className="h-3 w-3" /> Reabrir
-            </>
-          ) : (
-            <>
-              <Check className="h-3 w-3" /> Completar para todos
-            </>
-          )}
-        </button>
-      </div>
-    </li>
+        <StatusBadge tone="muted">Cálculo determinista · sin IA</StatusBadge>
+      </header>
+
+      {isLoading || !analisis ? (
+        <p className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />Calculando obligaciones…
+        </p>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-3">
+          {/* Jornada */}
+          <div className="rounded-xl border border-border bg-background/40 p-4">
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
+              <Clock className="h-3.5 w-3.5" />Jornada legal
+            </div>
+            {analisis.jornada.aplica === false ? (
+              <p className="text-sm text-muted-foreground">{analisis.jornada.motivo}</p>
+            ) : (
+              <>
+                <StatusBadge tone={analisis.jornada.cumple ? "success" : "warning"}>
+                  {analisis.jornada.cumple ? (
+                    <><CheckCircle2 className="mr-1 h-3 w-3" />Conforme</>
+                  ) : (
+                    <><AlertTriangle className="mr-1 h-3 w-3" />No conforme</>
+                  )}
+                </StatusBadge>
+                <p className="mt-2 text-sm text-foreground">{analisis.jornada.mensaje}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{analisis.jornada.baseLegal}</p>
+              </>
+            )}
+          </div>
+
+          {/* Liquidación / prestaciones */}
+          <div className="rounded-xl border border-border bg-background/40 p-4">
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
+              <Wallet className="h-3.5 w-3.5" />Liquidación estimada
+            </div>
+            {analisis.liquidacion.aplica === false ? (
+              <p className="text-sm text-muted-foreground">{analisis.liquidacion.motivo}</p>
+            ) : (
+              <>
+                <p className="font-display text-xl text-foreground">
+                  {formatCOP(analisis.liquidacion.total ?? 0)}
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {(analisis.liquidacion.conceptos ?? []).map((co) => (
+                    <li key={co.concepto} className="flex justify-between gap-2 text-xs">
+                      <span className="text-muted-foreground">{co.concepto}</span>
+                      <span className="text-foreground">{formatCOP(co.valor)}</span>
+                    </li>
+                  ))}
+                  {analisis.liquidacion.indemnizacionEstimada && (
+                    <li className="flex justify-between gap-2 border-t border-border/60 pt-1 text-xs">
+                      <span className="text-muted-foreground">
+                        {analisis.liquidacion.indemnizacionEstimada.concepto} (estimada)
+                      </span>
+                      <span className="text-foreground">
+                        {formatCOP(analisis.liquidacion.indemnizacionEstimada.valor)}
+                      </span>
+                    </li>
+                  )}
+                </ul>
+                <p className="mt-2 flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <Scale className="h-3 w-3" />Cada concepto cita su base legal (ver auditoría).
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Alertas accionables */}
+          <div className="rounded-xl border border-border bg-background/40 p-4">
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
+              <AlertTriangle className="h-3.5 w-3.5" />Alertas
+            </div>
+            {(() => {
+              const accionables = analisis.alertas.filter((a) => a.severidad !== "OK");
+              if (accionables.length === 0) {
+                return (
+                  <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <CheckCircle2 className="h-4 w-4 text-risk-low" />Sin alertas activas.
+                  </p>
+                );
+              }
+              return (
+                <ul className="space-y-2">
+                  {accionables.map((a, i) => (
+                    <li key={`${a.tipo}-${i}`} className="text-sm">
+                      <StatusBadge tone={sevTone(a.severidad)}>{a.tipo}</StatusBadge>
+                      <p className="mt-1 text-foreground">{a.mensaje}</p>
+                      {a.baseLegal && <p className="text-[11px] text-muted-foreground">{a.baseLegal}</p>}
+                    </li>
+                  ))}
+                </ul>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
