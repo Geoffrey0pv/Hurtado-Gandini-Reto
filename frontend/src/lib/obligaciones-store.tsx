@@ -11,6 +11,7 @@ type Ctx = {
   isDone: (id: string) => boolean;
   toggle: (id: string) => void;
   setDone: (id: string, done: boolean) => void;
+  setManyDone: (ids: string[], done: boolean) => void;
 };
 
 const Context = createContext<Ctx | null>(null);
@@ -38,6 +39,18 @@ export function ObligacionesProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const setManyDone = useCallback<Ctx["setManyDone"]>((ids, value) => {
+    setDoneMap((prev) => {
+      const next = { ...prev };
+      const ts = new Date().toISOString();
+      for (const id of ids) {
+        if (value) next[id] = { doneAt: ts };
+        else delete next[id];
+      }
+      return next;
+    });
+  }, []);
+
   const toggle = useCallback<Ctx["toggle"]>((id) => {
     setDoneMap((prev) => {
       const next = { ...prev };
@@ -51,8 +64,9 @@ export function ObligacionesProvider({ children }: { children: ReactNode }) {
     done,
     isDone: (id) => !!done[id],
     setDone,
+    setManyDone,
     toggle,
-  }), [done, setDone, toggle]);
+  }), [done, setDone, setManyDone, toggle]);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
