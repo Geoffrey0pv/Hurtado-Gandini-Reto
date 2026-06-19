@@ -6,21 +6,34 @@
 // para correr el pipeline end-to-end sin modelos descargados. Cuando hay
 // modelos (`ollama pull ...`), LLM_MODE=ollama usa inferencia real.
 import { Ollama } from "ollama";
-import { z } from "zod";
 import { env } from "../config/env.js";
 import { ExtractionSchema, type Extraction } from "../shared/schemas.js";
 
 const ollama = new Ollama({ host: env.OLLAMA_HOST });
 
-// Zod v4 trae conversion nativa a JSON Schema (reemplaza a zod-to-json-schema,
-// que no es compatible con Zod v4). Misma intencion del spec.
-const extractionJsonSchema = z.toJSONSchema(ExtractionSchema);
+// NOTA: el servidor de Ollama de esta maquina ignora el JSON Schema en `format`
+// (solo respeta format:"json" => "JSON valido", no la estructura). Por eso
+// fijamos las claves EXACTAS en el prompt y revalidamos con Zod (red dura).
+const SYSTEM_PROMPT = `Eres un asistente juridico experto en derecho laboral colombiano.
+Extrae los datos del contrato y responde EXCLUSIVAMENTE un objeto JSON valido,
+sin texto adicional, sin markdown, con EXACTAMENTE estas claves planas (sin anidar):
 
-const SYSTEM_PROMPT =
-  "Eres un asistente juridico experto en derecho laboral colombiano. " +
-  "Extrae EXACTAMENTE los campos del contrato laboral. Responde SOLO el JSON " +
-  "del schema. Si un dato no aparece en el texto, ponlo en null; NUNCA lo inventes. " +
-  "Las fechas en formato YYYY-MM-DD. El salario como numero sin separadores.";
+{
+  "tipoContrato": uno de ["TERMINO_FIJO","TERMINO_INDEFINIDO","OBRA_LABOR","PRESTACION_SERVICIOS","APRENDIZAJE","OTRO"] o null,
+  "nombreColaborador": string o null,
+  "cedula": string con solo digitos (sin puntos ni comas) o null,
+  "cargo": string o null,
+  "fechaInicio": string "YYYY-MM-DD" o null,
+  "fechaFin": string "YYYY-MM-DD" o null,
+  "salario": numero sin separadores de miles o null,
+  "jornadaHorasSemana": numero entero o null,
+  "confianza": numero entre 0 y 1 que refleje tu seguridad global
+}
+
+Reglas estrictas:
+- Si un dato NO aparece en el texto, su valor es null. NUNCA inventes.
+- No anides objetos. No agregues claves extra.
+- Responde unicamente el JSON.`;
 
 export interface ExtractionResult {
   data: Extraction;
@@ -40,14 +53,14 @@ export async function extractContract(
 
   const res = await ollama.chat({
     model,
-    format: extractionJsonSchema as Record<string, unknown>,
+    format: "json", // garantiza JSON parseable; la forma la fija el prompt + Zod
     options: { temperature: 0 }, // determinismo
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: text.slice(0, 12000) }, // recorte defensivo de contexto
     ],
   });
-  // Validacion dura: si el modelo se sale del schema, ZodError -> el worker
+  // Validacion dura: si el modelo se sale del contrato, ZodError -> el worker
   // marca FAILED y NO persiste basura.
   const data = ExtractionSchema.parse(JSON.parse(res.message.content));
   return { data, model };

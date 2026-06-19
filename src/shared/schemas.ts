@@ -52,16 +52,37 @@ export const CONTRACT_TYPES = [
   "PRESTACION_SERVICIOS", "APRENDIZAJE", "OTRO",
 ] as const;
 
+// Coerciones defensivas: el LLM (con format:"json") a veces devuelve tipos
+// laxos (cedula como numero, salario con separadores, jornada como string).
+// Normalizamos ANTES de validar para no descartar extracciones validas.
+const nullableDigitsString = z.preprocess((v) => {
+  if (v == null) return null;
+  const s = String(v).replace(/\D/g, "");
+  return s.length > 0 ? s : null;
+}, z.string().nullable());
+
+const nullableMoney = z.preprocess((v) => {
+  if (v == null) return null;
+  const n = Number(String(v).replace(/[^\d.]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}, z.number().nonnegative().nullable());
+
+const nullableInt = z.preprocess((v) => {
+  if (v == null) return null;
+  const n = Math.trunc(Number(v));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}, z.number().int().positive().nullable());
+
 export const ExtractionSchema = z.object({
-  tipoContrato: z.enum(CONTRACT_TYPES).nullable(),
+  tipoContrato: z.enum(CONTRACT_TYPES).nullable().catch(null),
   nombreColaborador: z.string().nullable(),
-  cedula: z.string().nullable(),
+  cedula: nullableDigitsString,
   cargo: z.string().nullable(),
-  fechaInicio: isoDate.nullable(),
-  fechaFin: isoDate.nullable(),
-  salario: z.number().nonnegative().nullable(),
-  jornadaHorasSemana: z.number().int().positive().nullable(),
+  fechaInicio: isoDate.nullable().catch(null),
+  fechaFin: isoDate.nullable().catch(null),
+  salario: nullableMoney,
+  jornadaHorasSemana: nullableInt,
   // Confianza global 0-1 que reporta el modelo sobre su propia extraccion.
-  confianza: z.number().min(0).max(1).nullable(),
+  confianza: z.number().min(0).max(1).nullable().catch(null),
 });
 export type Extraction = z.infer<typeof ExtractionSchema>;
