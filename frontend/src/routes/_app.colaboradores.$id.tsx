@@ -1268,14 +1268,14 @@ function DisciplinarioTab({ empleado: e }: { empleado: Employee }) {
                   <Mail className="h-3.5 w-3.5" />Enviar por correo ({e.correo})
                 </a>
                 <a
-                  href={`sms:${e.telefono.replace(/\s/g, "")}?&body=${encodeURIComponent(`Citación a descargos: diligencia el ${fmtFechaLarga(selected.fechaDiligencia)} a las ${selected.hora} (${selected.modalidad}, ${selected.lugar}). Carta formal enviada al correo registrado.`)}`}
+                  href={`sms:${e.telefono.replace(/\s/g, "")}?&body=${encodeURIComponent(`Citación a descargos: diligencia el ${fmtFechaLarga(selected.fechaDiligencia ?? "")} a las ${selected.hora ?? ""} (${selected.modalidad ?? ""}, ${selected.lugar ?? ""}). Carta formal enviada al correo registrado.`)}`}
                   onClick={() => registrarNotificacion(selected.id, "telefono")}
                   className="inline-flex items-center gap-2 rounded-full border border-border-strong px-4 py-2 text-xs font-medium text-foreground hover:bg-surface-elevated"
                 >
                   <MessageSquare className="h-3.5 w-3.5" />Enviar SMS ({e.telefono})
                 </a>
                 <button
-                  onClick={() => descargarCartaDoc(selected.cartaTexto, `carta-descargos-${e.id}-${selected.id}`)}
+                  onClick={() => descargarCartaDoc(selected.cartaTexto ?? "", `carta-descargos-${e.id}-${selected.id}`)}
                   className="inline-flex items-center gap-2 rounded-full border border-border-strong px-4 py-2 text-xs font-medium text-foreground hover:bg-surface-elevated"
                 >
                   <Download className="h-3.5 w-3.5" />Exportar a Word
