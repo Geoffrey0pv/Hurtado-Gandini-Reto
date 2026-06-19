@@ -20,6 +20,7 @@ import { novedadesRoutes } from "./modules/novedades/routes.js";
 import { alertasRoutes } from "./modules/alertas/routes.js";
 import { auditLogsRoutes } from "./modules/audit-logs/routes.js";
 import { dashboardRoutes } from "./modules/dashboard/routes.js";
+import { ragRoutes, auditLogRoutes } from "./modules/rag/routes.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -90,6 +91,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(alertasRoutes, { prefix: "/alertas" });
   await app.register(auditLogsRoutes, { prefix: "/audit-logs" });
   await app.register(dashboardRoutes, { prefix: "/dashboard" });
+  await app.register(ragRoutes, { prefix: "/rag" });
+  await app.register(auditLogRoutes, { prefix: "/audit-logs" });
 
   return app;
 }
