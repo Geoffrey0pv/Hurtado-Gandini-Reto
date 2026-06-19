@@ -67,7 +67,7 @@ function ObligacionesCompaniaPage() {
       <PageHeader
         eyebrow="Cumplimiento"
         title="Obligaciones de la compañía"
-        description="Cálculo determinista (sin IA) sobre los contratos cargados: prestaciones, jornada legal y alertas. Cada cifra cita su base legal y queda trazada en auditoría."
+        description="Prestaciones, jornada legal y alertas de cada contrato cargado. Cada cifra cita su base legal y queda trazada en auditoría."
       />
 
       <div className="mx-auto max-w-[1440px] space-y-6 px-4 pb-16 sm:px-6 lg:px-10">
@@ -149,7 +149,7 @@ function ContratoCompliance({
             {colaborador?.cargo ? ` · ${colaborador.cargo}` : ""}
           </p>
         </div>
-        <StatusBadge tone="muted">Cálculo determinista · sin IA</StatusBadge>
+        <StatusBadge tone="muted">Base legal trazable</StatusBadge>
       </header>
 
       {isLoading || !analisis ? (

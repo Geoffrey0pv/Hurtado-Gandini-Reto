@@ -1,19 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import {
-  Banknote,
-  Briefcase,
-  CalendarCheck,
-  CalendarDays,
-  ExternalLink,
-  FileSignature,
-  FileText,
-  IdCard,
-  Loader2,
-  Clock,
-  UploadCloud,
-  User,
-} from "lucide-react";
+import { ExternalLink, FileText, Loader2, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -35,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { RagChat } from "@/components/rag/RagChat";
 import { ApiError } from "@/lib/api";
 import {
   useContrato,
@@ -154,7 +142,7 @@ function UploadDocumentoDialog() {
         <DialogHeader>
           <DialogTitle>Cargar documento</DialogTitle>
           <DialogDescription>
-            Sube el PDF del contrato. La IA extraerá los datos y los dejará pendientes de
+            Sube el PDF del contrato. Se extraerán los datos y quedarán pendientes de
             revisión humana.
           </DialogDescription>
         </DialogHeader>
@@ -242,18 +230,6 @@ const TIPO_LABEL: Record<string, string> = {
   OTRO: "Otro",
 };
 
-interface ExtractedData {
-  tipoContrato?: string | null;
-  nombreColaborador?: string | null;
-  cedula?: string | null;
-  cargo?: string | null;
-  fechaInicio?: string | null;
-  fechaFin?: string | null;
-  salario?: number | null;
-  jornadaHorasSemana?: number | null;
-  confianza?: number | null;
-}
-
 function formatCOP(n: number): string {
   return new Intl.NumberFormat("es-CO", {
     style: "currency",
@@ -262,50 +238,39 @@ function formatCOP(n: number): string {
   }).format(n);
 }
 
-function DataField({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof User;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-background/40 p-3">
-      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-        <Icon className="h-3.5 w-3.5" />
-        {label}
-      </div>
-      <p className="mt-1 text-sm text-foreground">{value || "—"}</p>
-    </div>
-  );
-}
-
 function DocumentoDetail({ contrato }: { contrato: BackendContrato }) {
   // Trae el detalle con la URL prefirmada de MinIO (se genera bajo demanda).
   const { data: detail } = useContrato(contrato.id);
   const c = detail ?? contrato;
   const fileUrl = detail?.fileUrl ?? null;
   const fileName = c.fileKey.split("/").pop();
+  const tipo = c.tipoContrato;
+  const salarioNum = c.salario != null ? Number(c.salario) : null;
 
-  const ex = (c.extracted ?? {}) as ExtractedData;
-  const tipo = ex.tipoContrato ?? c.tipoContrato;
-  const salarioNum =
-    ex.salario ?? (c.salario != null ? Number(c.salario) : null);
-  const jornada = ex.jornadaHorasSemana ?? c.jornadaHorasSemana;
-  const confianza = typeof ex.confianza === "number" ? Math.round(ex.confianza * 100) : null;
-  const hasData = c.extracted != null;
+  // Resumen compacto de contexto (sin tabla pesada): tipo, salario, jornada.
+  const chips = [
+    tipo ? (TIPO_LABEL[tipo] ?? tipo) : null,
+    salarioNum != null ? formatCOP(salarioNum) : null,
+    c.jornadaHorasSemana != null ? `${c.jornadaHorasSemana} h/semana` : null,
+  ].filter(Boolean) as string[];
 
   return (
-    <div>
+    <div className="flex h-full flex-col">
       <p className="text-[11px] uppercase tracking-[0.22em] text-primary">
         {tipo ? (TIPO_LABEL[tipo] ?? tipo) : "Contrato"}
       </p>
       <h2 className="mt-2 break-all font-display text-2xl text-foreground">{fileName}</h2>
-      <p className="mt-1 text-xs text-muted-foreground">
-        Cargado el {c.createdAt.slice(0, 10)}
-      </p>
+      <p className="mt-1 text-xs text-muted-foreground">Cargado el {c.createdAt.slice(0, 10)}</p>
+
+      {chips.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {chips.map((ch) => (
+            <span key={ch} className="rounded-full border border-border bg-background/40 px-3 py-1 text-xs text-muted-foreground">
+              {ch}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Visor del archivo en MinIO */}
       <div className="mt-4">
@@ -322,58 +287,17 @@ function DocumentoDetail({ contrato }: { contrato: BackendContrato }) {
         )}
       </div>
 
-      {/* Datos extraídos por IA */}
-      <div className="mt-6">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground">
-            Datos extraídos por IA
-          </p>
-          {confianza != null && (
-            <StatusBadge tone={confianza >= 70 ? "success" : "warning"}>
-              Confianza {confianza}%
-            </StatusBadge>
-          )}
-        </div>
-
-        {hasData ? (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <DataField icon={User} label="Colaborador" value={ex.nombreColaborador ?? ""} />
-            <DataField icon={IdCard} label="Cédula" value={ex.cedula ?? ""} />
-            <DataField icon={Briefcase} label="Cargo" value={ex.cargo ?? ""} />
-            <DataField
-              icon={FileSignature}
-              label="Tipo de contrato"
-              value={tipo ? (TIPO_LABEL[tipo] ?? tipo) : ""}
-            />
-            <DataField icon={CalendarDays} label="Fecha de inicio" value={ex.fechaInicio ?? c.fechaInicio ?? ""} />
-            <DataField
-              icon={CalendarCheck}
-              label="Fecha de fin"
-              value={ex.fechaFin ?? c.fechaFin ?? "Indefinido"}
-            />
-            <DataField
-              icon={Banknote}
-              label="Salario"
-              value={salarioNum != null ? formatCOP(salarioNum) : ""}
-            />
-            <DataField
-              icon={Clock}
-              label="Jornada"
-              value={jornada != null ? `${jornada} h/semana` : ""}
-            />
-          </div>
+      {/* Revisión jurídica conversacional (RAG) */}
+      <div className="mt-4 min-h-0 flex-1">
+        {c.status === "DONE" ? (
+          <RagChat contratoId={c.id} />
         ) : (
           <p className="rounded-xl border border-border bg-background/40 p-4 text-sm text-muted-foreground">
             {c.status === "FAILED"
-              ? "La extracción falló para este documento."
-              : "Aún no hay datos extraídos. El documento sigue en procesamiento."}
+              ? "El procesamiento del documento falló; no es posible revisarlo."
+              : "El documento sigue en procesamiento. La revisión jurídica estará disponible al terminar."}
           </p>
         )}
-
-        <p className="mt-4 text-[11px] text-muted-foreground">
-          La extracción asistida por IA siempre debe validarse humanamente antes de
-          tener efectos jurídicos.
-        </p>
       </div>
     </div>
   );
@@ -394,7 +318,7 @@ function DocumentosPage() {
       <PageHeader
         eyebrow="Documentación"
         title="Documentos"
-        description="Contratos, otrosíes y anexos cargados. La extracción asistida por IA siempre se valida humanamente."
+        description="Contratos, otrosíes y anexos cargados. Toda extracción se valida humanamente antes de tener efectos jurídicos."
         actions={<UploadDocumentoDialog />}
       />
 
@@ -452,7 +376,7 @@ function DocumentosPage() {
       </div>
 
       <Sheet open={!!open} onOpenChange={(o) => !o && setOpen(null)}>
-        <SheetContent className="w-full overflow-y-auto bg-card sm:max-w-xl">
+        <SheetContent className="flex w-full flex-col bg-card sm:max-w-xl">
           <SheetTitle className="sr-only">Detalle de documento</SheetTitle>
           {open && <DocumentoDetail contrato={open} />}
         </SheetContent>
