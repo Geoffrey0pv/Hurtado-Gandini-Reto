@@ -11,6 +11,7 @@ import { authRoutes } from "./modules/users/routes.js";
 import { organizationRoutes } from "./modules/organizations/routes.js";
 import { colaboradoresRoutes } from "./modules/colaboradores/routes.js";
 import { contratosRoutes } from "./modules/contratos/routes.js";
+import { ragRoutes, auditLogRoutes } from "./modules/rag/routes.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -67,6 +68,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(organizationRoutes, { prefix: "/organizations" });
   await app.register(colaboradoresRoutes, { prefix: "/colaboradores" });
   await app.register(contratosRoutes, { prefix: "/contratos" });
+  await app.register(ragRoutes, { prefix: "/rag" });
+  await app.register(auditLogRoutes, { prefix: "/audit-logs" });
 
   return app;
 }

@@ -86,3 +86,44 @@ export const ExtractionSchema = z.object({
   confianza: z.number().min(0).max(1).nullable().catch(null),
 });
 export type Extraction = z.infer<typeof ExtractionSchema>;
+
+// ── RAG: Requests ─────────────────────────────────────────────────────
+export const RagAnalyzeSchema = z.object({
+  contratoId: z.uuid(),
+  query: z.string().min(10, "La pregunta debe tener al menos 10 caracteres"),
+});
+export type RagAnalyzeInput = z.infer<typeof RagAnalyzeSchema>;
+
+export const RagSimilarQuerySchema = z.object({
+  q: z.string().min(1),
+  k: z.coerce.number().int().min(1).max(20).default(5),
+});
+export type RagSimilarQuery = z.infer<typeof RagSimilarQuerySchema>;
+
+export const AuditLogQuerySchema = z.object({
+  action: z.string().optional(),
+  entity: z.string().optional(),
+  entityId: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type AuditLogQuery = z.infer<typeof AuditLogQuerySchema>;
+
+// ── RAG: Respuesta estructurada del LLM (doble red de seguridad) ──────
+const SEVERIDAD = ["alta", "media", "baja"] as const;
+
+export const RagRiskItemSchema = z.object({
+  descripcion: z.string(),
+  severidad: z.enum(SEVERIDAD).catch("media"),
+  fuentesCitadas: z.array(z.string()).default([]),
+  recomendacion: z.string(),
+});
+export type RagRiskItem = z.infer<typeof RagRiskItemSchema>;
+
+export const RagResponseSchema = z.object({
+  riesgos: z.array(RagRiskItemSchema).default([]),
+  resumen: z.string(),
+  abstenciones: z.array(z.string()).default([]),
+  confianza: z.number().min(0).max(1).catch(0.5),
+});
+export type RagResponse = z.infer<typeof RagResponseSchema>;
