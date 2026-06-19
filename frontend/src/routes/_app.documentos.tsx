@@ -1,10 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { FileText, UploadCloud } from "lucide-react";
+import { useEffect, useState } from "react";
+import { FileText, Loader2, UploadCloud } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StatusBadge } from "@/components/common/StatusBadge";
-import { useContratos } from "@/hooks/useContratos";
+import { ApiError } from "@/lib/api";
+import { useContratos, useIngestionJob, useUploadContrato } from "@/hooks/useContratos";
+import { useColaboradores } from "@/hooks/useColaboradores";
 import type { BackendContrato } from "@/lib/types";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -23,6 +43,177 @@ const STATUS_LABEL: Record<string, string> = {
 
 const filters = ["Todos", "Pendiente de extracción", "Procesando", "Pendiente de revisión", "Error"] as const;
 
+// ── Diálogo de carga: sube un PDF de contrato al pipeline de ingestión ──────
+// POST /contratos/upload (multipart: colaboradorId + file) → 202 { jobId } →
+// se hace polling de GET /contratos/job/:id hasta DONE/FAILED.
+function UploadDocumentoDialog() {
+  const [open, setOpen] = useState(false);
+  const [colaboradorId, setColaboradorId] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+
+  const { data: colaboradores = [], isLoading: loadingColab } = useColaboradores();
+  const upload = useUploadContrato();
+  const job = useIngestionJob(jobId);
+
+  // Reacciona al resultado del job (polling cada 2s en el hook).
+  useEffect(() => {
+    const status = job.data?.status;
+    if (!status) return;
+    if (status === "DONE") {
+      toast.success("Documento procesado", {
+        description: "La extracción terminó. El contrato queda pendiente de revisión.",
+      });
+      close();
+    } else if (status === "FAILED") {
+      toast.error("Falló el procesamiento", {
+        description: job.data?.error ?? "Revisa el archivo e inténtalo de nuevo.",
+      });
+      setJobId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job.data?.status]);
+
+  function reset() {
+    setColaboradorId("");
+    setFile(null);
+    setJobId(null);
+    upload.reset();
+  }
+
+  function close() {
+    setOpen(false);
+    setTimeout(reset, 200); // espera al cierre animado del diálogo
+  }
+
+  async function handleSubmit() {
+    if (!colaboradorId) {
+      toast.error("Selecciona un colaborador");
+      return;
+    }
+    if (!file) {
+      toast.error("Selecciona un archivo PDF");
+      return;
+    }
+    if (file.type !== "application/pdf") {
+      toast.error("Solo se aceptan archivos PDF");
+      return;
+    }
+    try {
+      const res = await upload.mutateAsync({ colaboradorId, file });
+      setJobId(res.jobId);
+      toast.message("Subida iniciada", {
+        description: "Procesando el documento en segundo plano…",
+      });
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? ((e.body as { error?: string })?.error ?? `Error ${e.status}`)
+          : "Error inesperado al subir";
+      toast.error("No se pudo subir", { description: msg });
+    }
+  }
+
+  const jobStatus = jobId ? job.data?.status : undefined;
+  const processing =
+    upload.isPending || (jobId != null && jobStatus !== "DONE" && jobStatus !== "FAILED");
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (processing) return; // no cerrar mientras procesa
+        if (o) setOpen(true);
+        else close();
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90">
+          <UploadCloud className="mr-2 h-4 w-4" />Cargar documento
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="bg-card sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Cargar documento</DialogTitle>
+          <DialogDescription>
+            Sube el PDF del contrato. La IA extraerá los datos y los dejará pendientes de
+            revisión humana.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="colaborador">Colaborador</Label>
+            <Select value={colaboradorId} onValueChange={setColaboradorId} disabled={processing}>
+              <SelectTrigger id="colaborador" className="w-full">
+                <SelectValue
+                  placeholder={loadingColab ? "Cargando colaboradores…" : "Selecciona un colaborador"}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {colaboradores.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.nombre} — {c.cedula}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!loadingColab && colaboradores.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                No hay colaboradores. Crea uno antes de cargar un contrato.
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="file">Archivo PDF</Label>
+            <input
+              id="file"
+              type="file"
+              accept="application/pdf"
+              disabled={processing}
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="block w-full cursor-pointer rounded-lg border border-border bg-background/40 text-sm text-muted-foreground file:mr-3 file:cursor-pointer file:border-0 file:bg-primary/15 file:px-4 file:py-2 file:text-sm file:text-foreground hover:file:bg-primary/25"
+            />
+          </div>
+
+          {jobId && jobStatus && (
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-background/40 px-3 py-2 text-sm">
+              {jobStatus !== "DONE" && jobStatus !== "FAILED" && (
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              )}
+              <span className="text-muted-foreground">
+                Estado: {STATUS_LABEL[jobStatus] ?? jobStatus}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={close} disabled={processing}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={processing || !colaboradorId || !file}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            {processing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />Procesando…
+              </>
+            ) : (
+              <>
+                <UploadCloud className="mr-2 h-4 w-4" />Subir
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function DocumentosPage() {
   const { data: contratos = [], isLoading } = useContratos();
   const [filter, setFilter] = useState<(typeof filters)[number]>("Todos");
@@ -39,9 +230,7 @@ function DocumentosPage() {
         eyebrow="Documentación"
         title="Documentos"
         description="Contratos, otrosíes y anexos cargados. La extracción asistida por IA siempre se valida humanamente."
-        actions={
-          <Button className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90"><UploadCloud className="mr-2 h-4 w-4" />Cargar documento</Button>
-        }
+        actions={<UploadDocumentoDialog />}
       />
 
       <div className="mx-auto max-w-[1440px] px-4 pb-16 sm:px-6 lg:px-10">

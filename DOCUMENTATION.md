@@ -246,7 +246,7 @@ se deriva del token. Errores: 400 (validación Zod), 401 (sin token/ inválido),
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/contratos/upload` | Sube un PDF (multipart), lo almacena en MinIO y encola la ingestión. Responde 202 con el job. |
+| POST | `/contratos/upload` | Sube un PDF. Multipart con `colaboradorId` (texto, antes del archivo) y `file` (PDF). Lo almacena en MinIO, crea contrato(PENDING)+job y encola la ingestión. Responde 202 `{ jobId, contratoId, status }`. |
 | GET | `/contratos` | Lista contratos del tenant. |
 | GET | `/contratos/:id` | Detalle de un contrato (incluye `extracted` y `status`). |
 | GET | `/contratos/:id/analisis` | Análisis determinista (prestaciones, jornada, alertas) calculado con reglas en código. |
