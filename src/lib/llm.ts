@@ -6,14 +6,35 @@
 // para correr el pipeline end-to-end sin modelos descargados. Cuando hay
 // modelos (`ollama pull ...`), LLM_MODE=ollama usa inferencia real.
 import { Ollama } from "ollama";
+import { z } from "zod";
 import { env } from "../config/env.js";
 import { ExtractionSchema, type Extraction } from "../shared/schemas.js";
 
 const ollama = new Ollama({ host: env.OLLAMA_HOST });
 
-// NOTA: el servidor de Ollama de esta maquina ignora el JSON Schema en `format`
-// (solo respeta format:"json" => "JSON valido", no la estructura). Por eso
-// fijamos las claves EXACTAS en el prompt y revalidamos con Zod (red dura).
+// Structured outputs: pasamos el JSON Schema (derivado de Zod) al parametro
+// `format` para que la GRAMATICA de Ollama fuerce claves/tipos/enums; el modelo
+// no puede desviarse. IMPORTANTE: el motor de gramatica de llama.cpp NO soporta
+// `pattern` (regex) y, si lo encuentra, hace fallback silencioso a json libre.
+// Por eso lo eliminamos del schema que enviamos. El formato de fecha lo sigue
+// validando Zod despues (doble red de seguridad). Confirmado empiricamente.
+function stripUnsupported(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(stripUnsupported);
+  if (node && typeof node === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(node)) {
+      if (k === "pattern" || k === "$schema") continue; // no soportados por la gramatica
+      out[k] = stripUnsupported(v);
+    }
+    return out;
+  }
+  return node;
+}
+const extractionFormat = stripUnsupported(z.toJSONSchema(ExtractionSchema)) as Record<
+  string,
+  unknown
+>;
+
 const SYSTEM_PROMPT = `Eres un asistente juridico experto en derecho laboral colombiano.
 Extrae los datos del contrato y responde EXCLUSIVAMENTE un objeto JSON valido,
 sin texto adicional, sin markdown, con EXACTAMENTE estas claves planas (sin anidar):
@@ -53,7 +74,7 @@ export async function extractContract(
 
   const res = await ollama.chat({
     model,
-    format: "json", // garantiza JSON parseable; la forma la fija el prompt + Zod
+    format: extractionFormat, // gramatica fuerza claves/tipos/enum (sin `pattern`)
     options: { temperature: 0 }, // determinismo
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
