@@ -14,6 +14,7 @@ import {
   Briefcase,
   CheckCircle2,
   Filter,
+  FolderPlus,
   GripVertical,
   IdCard,
   LayoutList,
@@ -42,7 +43,15 @@ import {
   type Presencia,
 } from "@/lib/mock/data";
 import { StatusBadge } from "@/components/common/StatusBadge";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -71,6 +80,66 @@ const presenciaTone: Record<Presencia, "muted" | "primary" | "warning"> = {
   permiso: "muted",
   incapacidad: "warning",
 };
+
+function CreateAreaDialog() {
+  const { addArea } = useEmployees();
+  const [open, setOpen] = useState(false);
+  const [nombre, setNombre] = useState("");
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const ok = addArea(nombre);
+    if (!ok) {
+      toast.error("Nombre inválido o área ya existente");
+      return;
+    }
+    toast.success(`Área "${nombre.trim()}" creada`);
+    setNombre("");
+    setOpen(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setNombre(""); }}>
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="rounded-full border-border-strong/60"
+        >
+          <FolderPlus className="mr-1 h-3.5 w-3.5" />Crear área
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="bg-card sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Crear área</DialogTitle>
+          <DialogDescription>
+            Crea una nueva área de la organización. Luego podrás arrastrar colaboradores hacia ella.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4 py-2">
+          <Input
+            autoFocus
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            placeholder="Nombre del área (p. ej. Logística)"
+          />
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={!nombre.trim()}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <FolderPlus className="mr-1 h-3.5 w-3.5" />Crear área
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function OrgPage() {
   const [mode, setMode] = useState<"tree" | "list">("tree");
@@ -104,6 +173,7 @@ function OrgPage() {
                 <LayoutList className="h-3.5 w-3.5" />Vista lista
               </button>
             </div>
+            <CreateAreaDialog />
             <Button
               asChild
               size="sm"

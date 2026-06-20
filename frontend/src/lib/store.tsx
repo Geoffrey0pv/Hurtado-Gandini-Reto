@@ -35,6 +35,7 @@ type Ctx = {
   getEmployee: (id: string) => Employee | undefined;
   moveEmployee: (id: string, changes: { area?: string; jefe?: string }) => Employee | undefined;
   reorderAreas: (next: string[]) => void;
+  addArea: (nombre: string) => boolean;
   renameArea: (oldName: string, newName: string) => void;
   removeArea: (name: string) => void;
   clearPendingCheck: (id: string) => void;
@@ -150,6 +151,15 @@ export function EmployeesProvider({ children }: { children: ReactNode }) {
         });
       },
 
+      addArea: (nombre) => {
+        const name = nombre.trim();
+        if (!name) return false;
+        // Evita duplicados (ignorando mayúsculas/minúsculas).
+        if (areas.some((a) => a.toLowerCase() === name.toLowerCase())) return false;
+        createArea.mutate({ nombre: name, orden: areas.length });
+        return true;
+      },
+
       renameArea: (oldName, newName) => {
         if (!newName.trim() || newName === oldName) return;
         const found = backendAreas.find((a) => a.nombre === oldName);
@@ -178,6 +188,7 @@ export function EmployeesProvider({ children }: { children: ReactNode }) {
       backendAreas,
       createColaborador,
       updateColaborador,
+      createArea,
       updateArea,
       deleteArea,
       pushCheck,
