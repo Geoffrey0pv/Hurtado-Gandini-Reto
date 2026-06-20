@@ -74,8 +74,18 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
     const e = err as { statusCode?: number; message?: string };
     const statusCode = e.statusCode ?? 500;
-    if (statusCode >= 500) req.log.error({ err }, "Error no controlado");
-    return reply.code(statusCode).send({ error: e.message || "Error interno" });
+    // Errores de servidor (5xx): se registra el detalle completo, pero NUNCA se
+    // expone al cliente (puede traer SQL crudo, rutas internas o datos
+    // sensibles). El usuario recibe un mensaje generico y accionable.
+    if (statusCode >= 500) {
+      req.log.error({ err }, "Error no controlado");
+      return reply
+        .code(statusCode)
+        .send({ error: "Error interno del servidor. Intentalo de nuevo en unos minutos." });
+    }
+    // Errores controlados (4xx): el mensaje fue definido por nosotros y es
+    // seguro y util mostrarlo (p.ej. "Credenciales invalidas").
+    return reply.code(statusCode).send({ error: e.message || "Solicitud invalida" });
   });
 
   // ── Health ──────────────────────────────────────────────────────────

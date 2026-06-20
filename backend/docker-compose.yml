@@ -8,7 +8,9 @@ services:
       POSTGRES_PASSWORD: legaltech
       POSTGRES_DB: legaltech
     ports:
-      - "5432:5432"
+      # Host 5433 -> contenedor 5432, para no chocar con un Postgres local
+      # (Homebrew/Postgres.app) que ya escuche en el 5432 del host.
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
