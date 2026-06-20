@@ -110,6 +110,108 @@ En constancia se firma en Medellin, el 15 de enero de 2026.
 
 ---
 
+## Texto 3 — Término fijo de un año (1-ene-2026 → 31-dic-2026)
+
+> Inicia el 1 de enero de 2026 y termina dentro del mismo año. Útil para ver
+> vencimiento de término fijo, vacaciones causadas y liquidación de un año completo.
+
+```
+CONTRATO INDIVIDUAL DE TRABAJO A TERMINO FIJO
+
+Entre COMERCIAL ANDES S.A.S., identificada con NIT 901.888.777-5, en adelante EL
+EMPLEADOR, y ANDRES FELIPE CASTRO RUIZ, mayor de edad, identificado con cedula de
+ciudadania No. 1.098.765.432, en adelante EL TRABAJADOR, se celebra el presente
+contrato individual de trabajo a termino fijo:
+
+CLAUSULA PRIMERA. CARGO. EL TRABAJADOR se desempenara como Auxiliar Contable, bajo
+subordinacion del EMPLEADOR.
+
+CLAUSULA SEGUNDA. DURACION. El contrato tendra una duracion de un (1) ano, contado
+a partir del 1 de enero de 2026 y hasta el 31 de diciembre de 2026, prorrogable.
+
+CLAUSULA TERCERA. PERIODO DE PRUEBA. Se pacta un periodo de prueba de dos (2) meses,
+de conformidad con la ley.
+
+CLAUSULA CUARTA. JORNADA. La jornada de trabajo sera de cuarenta y dos (42) horas
+semanales, de lunes a viernes, conforme a la Ley 2101 de 2021.
+
+CLAUSULA QUINTA. REMUNERACION. EL TRABAJADOR devengara un salario mensual de DOS
+MILLONES DOSCIENTOS MIL PESOS ($2.200.000).
+
+En constancia se firma en la ciudad de Bogota D.C., el 1 de enero de 2026.
+```
+
+---
+
+## Texto 4 — Término fijo con jornada excedida (1-ene-2026 → 30-sep-2026)
+
+> Inicia el 1 de enero de 2026 y termina el 30 de septiembre de 2026. Caso con
+> riesgo: jornada de 46 h (supera el máximo legal aplicable en 2026).
+
+```
+CONTRATO INDIVIDUAL DE TRABAJO A TERMINO FIJO
+
+Entre COMERCIAL ANDES S.A.S., identificada con NIT 901.888.777-5, EL EMPLEADOR, y
+DIANA MARCELA OSPINA LEON, identificada con cedula de ciudadania No. 43.221.100, EL
+TRABAJADOR, se celebra el presente contrato a termino fijo:
+
+CLAUSULA PRIMERA. CARGO. La trabajadora se desempenara como Asesora Comercial.
+
+CLAUSULA SEGUNDA. DURACION. El contrato tendra vigencia desde el 1 de enero de 2026
+y hasta el 30 de septiembre de 2026.
+
+CLAUSULA TERCERA. PERIODO DE PRUEBA. Sesenta (60) dias.
+
+CLAUSULA CUARTA. JORNADA. La jornada ordinaria sera de cuarenta y seis (46) horas
+semanales, distribuidas de lunes a sabado.
+
+CLAUSULA QUINTA. REMUNERACION. La trabajadora devengara un salario mensual de UN
+MILLON OCHOCIENTOS MIL PESOS ($1.800.000), mas las comisiones por ventas pactadas.
+
+En constancia se firma en la ciudad de Cali, el 1 de enero de 2026.
+```
+
+---
+
+## Texto 5 — Caso IDEAL de liquidación (término fijo, año completo 2026)
+
+> Caso de referencia para verificar la liquidación determinista. Término fijo del
+> 1-ene-2026 al 31-dic-2026 (un año = 360 días comerciales), salario mínimo 2026
+> ($1.750.905) y jornada máxima legal vigente (44 h). El auxilio de transporte
+> ($249.095) lo aplica el sistema automáticamente porque el salario ≤ 2 SMMLV.
+>
+> Resultado esperado (al liquidar al terminar el contrato, sin indemnización):
+> Cesantías $2.000.000 · Intereses $240.000 · Prima $2.000.000 ·
+> Vacaciones $875.452,50 · **Total $5.115.452,50**.
+
+```
+CONTRATO INDIVIDUAL DE TRABAJO A TERMINO FIJO
+
+Entre COMERCIAL ANDES S.A.S., identificada con NIT 901.888.777-5, en adelante EL
+EMPLEADOR, y SOFIA RAMIREZ TORRES, mayor de edad, identificada con cedula de
+ciudadania No. 1.144.556.677, en adelante LA TRABAJADORA, se celebra el presente
+contrato individual de trabajo a termino fijo:
+
+CLAUSULA PRIMERA. CARGO. La trabajadora se desempenara como Auxiliar Administrativo.
+
+CLAUSULA SEGUNDA. DURACION. El contrato tendra una duracion de un (1) ano, contado
+a partir del 1 de enero de 2026 y hasta el 31 de diciembre de 2026.
+
+CLAUSULA TERCERA. JORNADA. La jornada de trabajo sera de cuarenta y cuatro (44)
+horas semanales, conforme a la Ley 2101 de 2021.
+
+CLAUSULA CUARTA. REMUNERACION. La trabajadora devengara un salario mensual
+equivalente al salario minimo legal mensual vigente de UN MILLON SETECIENTOS
+CINCUENTA MIL NOVECIENTOS CINCO PESOS ($1.750.905), mas el auxilio de transporte
+de ley.
+
+CLAUSULA QUINTA. PERIODO DE PRUEBA. Dos (2) meses.
+
+En constancia se firma en la ciudad de Bogota D.C., el 1 de enero de 2026.
+```
+
+---
+
 ## Verificación rápida por API (opcional)
 
 ```bash

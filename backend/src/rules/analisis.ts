@@ -1,6 +1,6 @@
 // src/rules/analisis.ts — Agrega las reglas deterministas sobre los datos de
 // un contrato ya extraidos. Funcion pura (sin IA, sin DB) => facil de testear.
-import { dias360, parseISODate } from "./constants.js";
+import { auxilioTransporteAplicable, dias360, parseISODate } from "./constants.js";
 import { validarJornada, type JornadaResult } from "./jornada.js";
 import {
   alertaLiquidacionPendiente,
@@ -52,7 +52,14 @@ export function analizarContrato(
     const inicio = parseISODate(datos.fechaInicio);
     const fin = datos.fechaFin ? parseISODate(datos.fechaFin) : hoy;
     const diasTrabajados = Math.max(0, dias360(inicio, fin));
-    const base = liquidacionDefinitiva({ salarioMensual: datos.salario, diasTrabajados });
+    // El auxilio de transporte (salarios <= 2 SMMLV) ENTRA en la base de
+    // cesantias/prima (FUNDAMENTOS 6.1); liquidacionDefinitiva lo excluye de vacaciones.
+    const auxilioTransporte = auxilioTransporteAplicable(datos.salario);
+    const base = liquidacionDefinitiva({
+      salarioMensual: datos.salario,
+      diasTrabajados,
+      auxilioTransporte,
+    });
 
     // Indemnizacion estimada segun tipo de contrato.
     let indemnizacionEstimada: ConceptoLiquidacion | undefined;
