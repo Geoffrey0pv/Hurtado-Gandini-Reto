@@ -174,6 +174,20 @@ export const ExtractionSchema = z.object({
 });
 export type Extraction = z.infer<typeof ExtractionSchema>;
 
+// Correccion manual de las variables extraidas (post-update humano del contrato).
+// Todos los campos son opcionales: solo se actualiza lo que el usuario edita.
+export const UpdateContratoSchema = z.object({
+  tipoContrato: z.enum(CONTRACT_TYPES).nullable().optional(),
+  nombreColaborador: z.string().nullable().optional(),
+  cedula: z.string().nullable().optional(),
+  cargo: z.string().nullable().optional(),
+  fechaInicio: isoDate.nullable().optional(),
+  fechaFin: isoDate.nullable().optional(),
+  salario: z.number().nonnegative().nullable().optional(),
+  jornadaHorasSemana: z.number().int().positive().nullable().optional(),
+});
+export type UpdateContratoInput = z.infer<typeof UpdateContratoSchema>;
+
 // ── RAG: Requests ─────────────────────────────────────────────────────
 export const RagAnalyzeSchema = z.object({
   contratoId: z.uuid(),

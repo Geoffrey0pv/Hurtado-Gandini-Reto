@@ -1,4 +1,4 @@
-# Documentación del Sistema — LaborApp (SaaS LegalTech)
+# Documentación del Sistema — VinApp (SaaS LegalTech)
 
 Documento técnico del backend y frontend desarrollados. Cubre la descripción del
 sistema, los requerimientos implementados, la arquitectura, el modelo de datos, el
@@ -8,7 +8,7 @@ pipeline de IA, las reglas deterministas y la documentación completa de la API.
 
 ## 1. Descripción del sistema
 
-LaborApp es un SaaS B2B multi-tenant orientado a equipos de Talento Humano y
+VinApp es un SaaS B2B multi-tenant orientado a equipos de Talento Humano y
 abogados laboralistas en Colombia. Permite:
 
 - Gestionar organizaciones (tenants), usuarios, áreas y colaboradores.
