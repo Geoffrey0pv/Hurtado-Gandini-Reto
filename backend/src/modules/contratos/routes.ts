@@ -1,7 +1,7 @@
 // src/modules/contratos/routes.ts — Subida de PDF y consulta de contratos.
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { IdParamSchema } from "../../shared/schemas.js";
+import { IdParamSchema, UpdateContratoSchema } from "../../shared/schemas.js";
 import { httpError } from "../../shared/errors.js";
 import { getTenant } from "../../shared/tenant.js";
 import { extractQueue } from "../../lib/queue.js";
@@ -14,6 +14,7 @@ import {
   getContrato,
   getIngestionJob,
   listContratos,
+  updateContratoExtraido,
 } from "./service.js";
 
 export async function contratosRoutes(app: FastifyInstance) {
@@ -34,6 +35,10 @@ export async function contratosRoutes(app: FastifyInstance) {
       data.file.resume();
       throw httpError(400, "Falta el campo 'colaboradorId'");
     }
+
+    // complex=true => usa el modelo de razonamiento (qwen2.5) para contratos
+    // complejos; por defecto usa el modelo estandar (llama3), mas rapido.
+    const complex = (data.fields.complex as { value?: string } | undefined)?.value === "true";
 
     // El colaborador debe existir y pertenecer al tenant.
     const colaborador = await getColaborador(organizationId, colaboradorId);
@@ -63,6 +68,7 @@ export async function contratosRoutes(app: FastifyInstance) {
       colaboradorId,
       organizationId,
       fileKey,
+      complex,
     });
 
     return reply.code(202).send({
@@ -87,6 +93,29 @@ export async function contratosRoutes(app: FastifyInstance) {
     if (!contrato) throw httpError(404, "Contrato no encontrado");
     const fileUrl = await presignGet(contrato.fileKey).catch(() => null);
     return { ...contrato, fileUrl };
+  });
+
+  // PATCH /contratos/:id — corrección manual de las variables extraídas.
+  // Permite al humano arreglar lo que la IA extrajo mal y persistirlo. Trazable.
+  app.patch("/:id", async (req) => {
+    const { organizationId, userId } = getTenant(req);
+    const { id } = IdParamSchema.parse(req.params);
+    const cambios = UpdateContratoSchema.parse(req.body);
+
+    const updated = await updateContratoExtraido(organizationId, id, cambios);
+    if (!updated) throw httpError(404, "Contrato no encontrado");
+
+    await writeAuditLog({
+      organizationId,
+      userId,
+      action: "CONTRACT_MANUAL_FIX",
+      entity: "contrato",
+      entityId: id,
+      aiModel: null, // correccion humana, no IA
+      payload: { cambios },
+    });
+
+    return updated;
   });
 
   // GET /contratos/:id/analisis — compliance DETERMINISTA (sin IA) sobre los

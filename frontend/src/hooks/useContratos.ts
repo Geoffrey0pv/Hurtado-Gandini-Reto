@@ -1,6 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiUpload } from "@/lib/api";
+import { apiGet, apiPatch, apiUpload } from "@/lib/api";
 import type { AnalisisContrato, BackendContrato } from "@/lib/types";
+
+export interface UpdateContratoInput {
+  tipoContrato?: string | null;
+  nombreColaborador?: string | null;
+  cedula?: string | null;
+  cargo?: string | null;
+  fechaInicio?: string | null;
+  fechaFin?: string | null;
+  salario?: number | null;
+  jornadaHorasSemana?: number | null;
+}
 
 const KEY = ["contratos"] as const;
 
@@ -43,13 +54,36 @@ export function useContratoAnalisis(id: string, enabled = false) {
 export function useUploadContrato() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ colaboradorId, file }: { colaboradorId: string; file: File }) => {
+    mutationFn: ({
+      colaboradorId,
+      file,
+      complex = false,
+    }: {
+      colaboradorId: string;
+      file: File;
+      complex?: boolean;
+    }) => {
       const form = new FormData();
+      // Los campos de texto van ANTES del archivo para que el backend los lea.
       form.append("colaboradorId", colaboradorId);
+      form.append("complex", String(complex));
       form.append("file", file);
       return apiUpload<UploadContratoResult>("/contratos/upload", form);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
+  });
+}
+
+// Corrección manual de las variables extraídas (post-update humano).
+export function useUpdateContrato() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateContratoInput }) =>
+      apiPatch<BackendContrato>(`/contratos/${id}`, data),
+    onSuccess: (_r, { id }) => {
+      qc.invalidateQueries({ queryKey: KEY });
+      qc.invalidateQueries({ queryKey: [...KEY, id] });
+    },
   });
 }
 

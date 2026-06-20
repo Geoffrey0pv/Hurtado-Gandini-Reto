@@ -1,4 +1,4 @@
-# LaborApp — SaaS LegalTech (Derecho Laboral y Compliance)
+# VinApp — SaaS LegalTech (Derecho Laboral y Compliance)
 
 Plataforma B2B multi-tenant para áreas de Talento Humano que centraliza la gestión
 de colaboradores, contratos y obligaciones laborales, y aplica IA híbrida local

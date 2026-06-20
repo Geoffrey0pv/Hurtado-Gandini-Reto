@@ -72,13 +72,16 @@ export async function extractContract(
     return { data: mockExtraction(text), model: `mock:${model}` };
   }
 
+  // El modelo avanzado (qwen2.5, 32k de contexto) admite mas texto: util en
+  // contratos largos/complejos donde los datos clave estan dispersos.
+  const maxChars = complex ? 28000 : 12000;
   const res = await ollama.chat({
     model,
     format: extractionFormat, // gramatica fuerza claves/tipos/enum (sin `pattern`)
     options: { temperature: 0 }, // determinismo
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: text.slice(0, 12000) }, // recorte defensivo de contexto
+      { role: "user", content: text.slice(0, maxChars) }, // recorte defensivo de contexto
     ],
   });
   // Validacion dura: si el modelo se sale del contrato, ZodError -> el worker
