@@ -33,11 +33,17 @@ type Ctx = {
   pendingChecks: PendingCheck[];
   addEmployee: (e: Employee) => void;
   getEmployee: (id: string) => Employee | undefined;
-  moveEmployee: (id: string, changes: { area?: string; jefe?: string }) => Employee | undefined;
+  // `jefe`/`area` pueden ser null para "limpiar": area null = "Sin área",
+  // jefe null = reporta directo a la cima (sin jefe).
+  moveEmployee: (
+    id: string,
+    changes: { area?: string | null; jefe?: string | null },
+  ) => Employee | undefined;
   reorderAreas: (next: string[]) => void;
   addArea: (nombre: string) => boolean;
   renameArea: (oldName: string, newName: string) => void;
-  removeArea: (name: string) => void;
+  // Devuelve cuántos colaboradores quedaron sin área (reasignados).
+  removeArea: (name: string) => number;
   clearPendingCheck: (id: string) => void;
 };
 
@@ -107,34 +113,44 @@ export function EmployeesProvider({ children }: { children: ReactNode }) {
         const emp = employees.find((e) => e.id === id);
         if (!emp) return undefined;
 
-        const changedArea = changes.area !== undefined && changes.area !== emp.area;
-        const changedJefe = changes.jefe !== undefined && changes.jefe !== emp.jefe;
+        // Normalizamos los "valores vacíos" al texto que usa el UI:
+        // area null → "Sin área", jefe null → "—".
+        const nextArea = changes.area === undefined ? undefined : (changes.area ?? "Sin área");
+        const nextJefe = changes.jefe === undefined ? undefined : (changes.jefe ?? "—");
+
+        const changedArea = nextArea !== undefined && nextArea !== emp.area;
+        const changedJefe = nextJefe !== undefined && nextJefe !== emp.jefe;
 
         if (changedArea || changedJefe) {
           const motivo = changedArea && changedJefe
-            ? `Cambió de área (${emp.area} → ${changes.area}) y jefe.`
+            ? `Cambió de área (${emp.area} → ${nextArea}) y de jefe (${emp.jefe} → ${nextJefe}).`
             : changedArea
-              ? `Cambió de área: ${emp.area} → ${changes.area}.`
-              : `Cambió jefe inmediato: ${emp.jefe} → ${changes.jefe}.`;
+              ? `Cambió de área: ${emp.area} → ${nextArea}.`
+              : `Cambió jefe inmediato: ${emp.jefe} → ${nextJefe}.`;
 
           const updated: Employee = {
             ...emp,
-            area: changes.area ?? emp.area,
-            jefe: changes.jefe ?? emp.jefe,
+            area: nextArea ?? emp.area,
+            jefe: nextJefe ?? emp.jefe,
           };
 
-          // Find new jefe's id from their name
-          let jefeId: string | undefined;
-          if (changes.jefe) {
-            const jefeColab = backendColabs.find((c) => c.nombre === changes.jefe);
-            jefeId = jefeColab?.id;
+          // Resolver jefeId: null = sin jefe (cima); nombre desconocido (p. ej.
+          // el CEO sintético) también equivale a "sin jefe en BD".
+          let jefeIdField: string | null | undefined;
+          if (changes.jefe !== undefined) {
+            jefeIdField = changes.jefe
+              ? (backendColabs.find((c) => c.nombre === changes.jefe)?.id ?? null)
+              : null;
           }
+
+          // area: null limpia la columna; un string la asigna.
+          const areaField = changes.area === undefined ? undefined : changes.area;
 
           updateColaborador.mutate({
             id,
             data: {
-              ...(changedArea ? { area: changes.area } : {}),
-              ...(jefeId !== undefined ? { jefeId } : {}),
+              ...(areaField !== undefined ? { area: areaField } : {}),
+              ...(jefeIdField !== undefined ? { jefeId: jefeIdField } : {}),
             },
           });
           pushCheck(updated, motivo);
@@ -172,7 +188,15 @@ export function EmployeesProvider({ children }: { children: ReactNode }) {
 
       removeArea: (name) => {
         const found = backendAreas.find((a) => a.nombre === name);
+        // Antes de borrar el área, reasignamos a sus colaboradores a "Sin área"
+        // (area=null) para no dejar referencias colgando ni perderlos del
+        // organigrama (siguen visibles bajo el grupo "Sin área").
+        const miembros = backendColabs.filter((c) => c.area === name);
+        miembros.forEach((c) =>
+          updateColaborador.mutate({ id: c.id, data: { area: null } }),
+        );
         if (found) deleteArea.mutate(found.id);
+        return miembros.length;
       },
 
       clearPendingCheck: (id) =>

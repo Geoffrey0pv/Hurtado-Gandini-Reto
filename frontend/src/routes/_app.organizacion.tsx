@@ -225,86 +225,131 @@ const TREE_CSS = `
 .org-tree .node { display: inline-block; vertical-align: top; }
 `;
 
+const SIN_AREA = "Sin área";
+
+// Reparte los elementos de forma balanceada alrededor del centro: el 1.º al
+// centro, el 2.º a la derecha, el 3.º a la izquierda, el 4.º más a la derecha,
+// etc. Así, al crear áreas, el árbol crece "una a la izquierda, otra a la
+// derecha" y se mantiene simétrico bajo el CEO.
+function balancedOrder<T>(items: T[]): T[] {
+  const left: T[] = [];
+  const right: T[] = [];
+  items.forEach((it, i) => {
+    if (i !== 0 && i % 2 === 0) left.unshift(it);
+    else right.push(it);
+  });
+  return [...left, ...right];
+}
+
 function TreeView({ onSelect }: { onSelect: (e: Employee) => void }) {
   const { employees, areas, moveEmployee, renameArea, removeArea } = useEmployees();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  const activos = employees.filter((e) => e.estadoVinculacion === "activo");
+
+  function alertMove(updated: Employee | undefined, description: string) {
+    if (updated) toast.warning("Cambio de jerarquía", { description });
+  }
 
   function handleDragEnd(ev: DragEndEvent) {
     const { active, over } = ev;
     if (!over) return;
     const empId = String(active.id);
     const overId = String(over.id);
-    if (overId.startsWith("area:")) {
+
+    if (overId === "ceo") {
+      // Soltar sobre el CEO = promover a la cima (reporta directo a Dirección).
+      const updated = moveEmployee(empId, { jefe: null });
+      alertMove(updated, `${updated?.nombre} ahora reporta directo a Dirección general. Verifica los datos en el perfil.`);
+    } else if (overId === "sinarea") {
+      const updated = moveEmployee(empId, { area: null, jefe: null });
+      alertMove(updated, `${updated?.nombre} quedó sin área asignada. Verifica los datos en el perfil.`);
+    } else if (overId.startsWith("area:")) {
       const area = overId.slice(5);
-      const updated = moveEmployee(empId, { area, jefe: "Ricardo Patiño" });
-      if (updated) toast.warning("Cambio de jerarquía", {
-        description: `${updated.nombre} fue movido a ${area}. Verifica los datos en el perfil.`,
-      });
+      // Mover a un área lo deja como raíz de esa área (sin jefe dentro de ella).
+      const updated = moveEmployee(empId, { area, jefe: null });
+      alertMove(updated, `${updated?.nombre} fue movido a ${area}. Verifica los datos en el perfil.`);
     } else if (overId.startsWith("emp:")) {
       const targetId = overId.slice(4);
       if (targetId === empId) return;
       const target = employees.find((e) => e.id === targetId);
       if (!target) return;
-      // Prevent dropping a node on one of its own descendants
+      // Evita soltar un superior debajo de uno de sus propios subordinados.
       if (isDescendantOf(target, empId, employees)) {
         toast.error("No puedes mover un superior debajo de uno de sus subordinados.");
         return;
       }
       const updated = moveEmployee(empId, { area: target.area, jefe: target.nombre });
-      if (updated) toast.warning("Cambio de jerarquía", {
-        description: `${updated.nombre} ahora reporta a ${target.nombre}. Verifica los datos en el perfil.`,
-      });
+      alertMove(updated, `${updated?.nombre} ahora reporta a ${target.nombre}. Verifica los datos en el perfil.`);
     }
   }
 
-  const activos = employees.filter((e) => e.estadoVinculacion === "activo");
-  const namesByArea = new Map<string, Set<string>>();
-  areas.forEach((a) => namesByArea.set(a, new Set(activos.filter((e) => e.area === a).map((e) => e.nombre))));
-
-  function rootsOf(area: string) {
-    const inArea = activos.filter((e) => e.area === area);
-    const names = namesByArea.get(area)!;
-    return inArea.filter((e) => !names.has(e.jefe));
+  // Las raíces de un grupo son quienes no tienen a su jefe dentro del mismo grupo.
+  function rootsOfMembers(members: Employee[]) {
+    const names = new Set(members.map((m) => m.nombre));
+    return members.filter((e) => !names.has(e.jefe));
   }
+
+  // Colaboradores cuya área no existe (o es null) → grupo "Sin área".
+  const unassigned = activos.filter((e) => !areas.includes(e.area));
+
+  // Cada grupo del organigrama: áreas reales (editables) + "Sin área" (fijo).
+  const groups = [
+    ...balancedOrder(areas).map((nombre) => ({
+      nombre,
+      droppableId: `area:${nombre}`,
+      editable: true,
+      members: activos.filter((e) => e.area === nombre),
+    })),
+    ...(unassigned.length > 0
+      ? [{ nombre: SIN_AREA, droppableId: "sinarea", editable: false, members: unassigned }]
+      : []),
+  ];
 
   return (
     <div className="space-y-6">
       <style>{TREE_CSS}</style>
 
       <p className="text-xs text-muted-foreground">
-        Arrastra una tarjeta para moverla entre áreas o sobre otro colaborador para que pase a reportarle.
-        Haz clic en el nombre de un área para renombrarla.
+        Arrastra una tarjeta a un área, sobre otro colaborador (para que le reporte) o sobre el
+        nodo de Dirección general (para subirlo a la cima). Cada cambio queda registrado como
+        verificación pendiente. Haz clic en el nombre de un área para renombrarla.
       </p>
 
       <div className="overflow-x-auto pb-6">
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          <ul className="org-tree mx-auto">
+          <ul className="org-tree mx-auto w-max">
             <li>
               <div className="node">
                 <CEOCard />
               </div>
-              <ul>
-                {areas.map((area) => (
-                  <li key={area}>
-                    <div className="node">
-                      <AreaCard
-                        area={area}
-                        count={activos.filter((e) => e.area === area).length}
-                        onRename={(next) => renameArea(area, next)}
-                        onRemove={() => removeArea(area)}
-                        hasMembers={activos.some((e) => e.area === area)}
-                      />
-                    </div>
-                    {rootsOf(area).length > 0 && (
-                      <ul>
-                        {rootsOf(area).map((e) => (
-                          <EmployeeSubtree key={e.id} employee={e} all={activos} onSelect={onSelect} />
-                        ))}
-                      </ul>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              {groups.length > 0 && (
+                <ul>
+                  {groups.map((g) => {
+                    const roots = rootsOfMembers(g.members);
+                    return (
+                      <li key={g.droppableId}>
+                        <div className="node">
+                          <AreaCard
+                            area={g.nombre}
+                            count={g.members.length}
+                            droppableId={g.droppableId}
+                            onRename={g.editable ? (next) => renameArea(g.nombre, next) : undefined}
+                            onRemove={g.editable ? () => removeArea(g.nombre) : undefined}
+                          />
+                        </div>
+                        {roots.length > 0 && (
+                          <ul>
+                            {roots.map((e) => (
+                              <EmployeeSubtree key={e.id} employee={e} all={g.members} onSelect={onSelect} />
+                            ))}
+                          </ul>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </li>
           </ul>
         </DndContext>
@@ -327,8 +372,15 @@ function isDescendantOf(candidate: Employee, ancestorId: string, all: Employee[]
 }
 
 function CEOCard() {
+  const { setNodeRef, isOver } = useDroppable({ id: "ceo" });
   return (
-    <div className="inline-block min-w-[220px] rounded-2xl border border-primary/30 bg-card px-5 py-3 text-center shadow-[var(--shadow-elegant)]">
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "inline-block min-w-[220px] rounded-2xl border bg-card px-5 py-3 text-center shadow-[var(--shadow-elegant)] transition",
+        isOver ? "border-primary/60 ring-2 ring-primary/20" : "border-primary/30",
+      )}
+    >
       <p className="text-[10px] uppercase tracking-[0.22em] text-primary">Dirección general</p>
       <p className="mt-1 font-display text-base text-foreground">Ricardo Patiño</p>
       <p className="text-[11px] text-muted-foreground">CEO · Logística Andina S.A.</p>
@@ -339,38 +391,57 @@ function CEOCard() {
 function AreaCard({
   area,
   count,
+  droppableId,
   onRename,
   onRemove,
-  hasMembers,
 }: {
   area: string;
   count: number;
-  onRename: (next: string) => void;
-  onRemove: () => void;
-  hasMembers: boolean;
+  droppableId: string;
+  // Si no se pasan, la tarjeta es de solo lectura (p. ej. el grupo "Sin área").
+  onRename?: (next: string) => void;
+  onRemove?: (() => number) | (() => void);
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `area:${area}` });
+  const { setNodeRef, isOver } = useDroppable({ id: droppableId });
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(area);
 
   function commit() {
     setEditing(false);
     if (draft.trim() && draft !== area) {
-      onRename(draft.trim());
+      onRename?.(draft.trim());
       toast.success(`Área renombrada a "${draft.trim()}"`);
     } else setDraft(area);
+  }
+
+  function handleRemove() {
+    if (!onRemove) return;
+    const msg =
+      count > 0
+        ? `¿Eliminar el área "${area}"? Sus ${count} colaborador${count === 1 ? "" : "es"} pasarán a "${SIN_AREA}".`
+        : `¿Eliminar el área "${area}"?`;
+    if (!confirm(msg)) return;
+    onRemove();
+    toast.success(
+      count > 0
+        ? `Área "${area}" eliminada. ${count} colaborador${count === 1 ? "" : "es"} movido${count === 1 ? "" : "s"} a "${SIN_AREA}".`
+        : `Área "${area}" eliminada.`,
+    );
   }
 
   return (
     <div
       ref={setNodeRef}
       className={cn(
-        "inline-flex min-w-[200px] flex-col items-center gap-1 rounded-2xl border bg-surface-elevated px-4 py-3 transition",
+        "inline-flex min-w-[200px] flex-col items-center gap-1 rounded-2xl border px-4 py-3 transition",
+        onRemove ? "bg-surface-elevated" : "border-dashed bg-surface-elevated/40",
         isOver ? "border-primary/60 bg-primary/5" : "border-border",
       )}
     >
-      <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">Área</p>
-      {editing ? (
+      <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+        {onRename ? "Área" : "Sin área"}
+      </p>
+      {editing && onRename ? (
         <input
           autoFocus
           value={draft}
@@ -382,7 +453,7 @@ function AreaCard({
           }}
           className="w-full bg-transparent text-center font-display text-base text-foreground outline-none"
         />
-      ) : (
+      ) : onRename ? (
         <button
           onClick={() => setEditing(true)}
           className="group inline-flex items-center gap-1.5 font-display text-base text-foreground hover:text-primary"
@@ -390,19 +461,20 @@ function AreaCard({
           {area}
           <Pencil className="h-3 w-3 opacity-0 transition group-hover:opacity-60" />
         </button>
+      ) : (
+        <span className="font-display text-base text-muted-foreground">{area}</span>
       )}
       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
         <span>{count} colaborador{count === 1 ? "" : "es"}</span>
-        <button
-          onClick={() => {
-            if (hasMembers) { toast.error("No puedes eliminar un área con colaboradores asignados."); return; }
-            if (confirm(`¿Eliminar el área "${area}"?`)) onRemove();
-          }}
-          className="grid h-6 w-6 place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-primary"
-          aria-label="Eliminar área"
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
+        {onRemove && (
+          <button
+            onClick={handleRemove}
+            className="grid h-6 w-6 place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-primary"
+            aria-label="Eliminar área"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
       </div>
     </div>
   );
