@@ -7,6 +7,12 @@ trazabilidad. El cálculo de prestaciones, jornada (Ley 2101/2021) y debido proc
 se hace con reglas deterministas en código; el LLM solo extrae y redacta, nunca
 calcula cifras con efecto jurídico.
 
+## Demo en producción
+
+- URL: https://frontend-gilt-zeta-96lv4ddszp.vercel.app/login
+- Usuario: `admin@laboralapp.com`
+- Contraseña: `demo1234`
+
 ## Arquitectura
 
 ```
