@@ -12,4 +12,9 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Forzar nitro con preset Vercel para que el build genere la funcion SSR en
+  // `.vercel/output` (Build Output API). Necesario para desplegar a Vercel por
+  // CLI/remoto; sin esto el plugin omite nitro y las rutas dan 404.
+  // En el sandbox de Lovable este preset se sobreescribe a cloudflare-module.
+  nitro: { preset: "vercel" },
 });
