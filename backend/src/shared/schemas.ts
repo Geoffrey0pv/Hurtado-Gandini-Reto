@@ -34,8 +34,11 @@ export const CreateColaboradorSchema = z.object({
   cargo: z.string().optional(),
   email: z.string().email().optional(),
   telefono: z.string().optional(),
-  area: z.string().optional(),
-  jefeId: z.uuid().optional(),
+  // area/jefeId aceptan null para poder "limpiar" el valor: al eliminar un area
+  // sus colaboradores pasan a area=null ("Sin area"), y al promover a alguien a
+  // la cima se le quita el jefe (jefeId=null).
+  area: z.string().nullable().optional(),
+  jefeId: z.uuid().nullable().optional(),
   estado: z.enum(["activo", "inactivo"]).optional(),
   estadoVinculacion: z.enum(["activo", "retirado"]).optional(),
   presencia: z.enum(["en_oficina", "vacaciones", "permiso", "incapacidad"]).optional(),
