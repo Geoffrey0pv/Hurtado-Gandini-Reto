@@ -36,7 +36,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/documentos")({
-  head: () => ({ meta: [{ title: "Documentos · LaborApp" }] }),
+  head: () => ({ meta: [{ title: "Documentos · VinApp" }] }),
   component: DocumentosPage,
 });
 

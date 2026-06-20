@@ -19,7 +19,7 @@ import { useAlertas } from "@/hooks/useAlertas";
 import type { AnalisisAlerta, BackendColaborador, BackendContrato } from "@/lib/types";
 
 export const Route = createFileRoute("/_app/obligaciones")({
-  head: () => ({ meta: [{ title: "Obligaciones · LaborApp" }] }),
+  head: () => ({ meta: [{ title: "Obligaciones · VinApp" }] }),
   component: ObligacionesCompaniaPage,
 });
 

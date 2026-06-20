@@ -1,4 +1,4 @@
-// Mock data for LaborApp prototype. All Spanish, Colombian context.
+// Mock data for VinApp prototype. All Spanish, Colombian context.
 
 export type RiskLevel = "alto" | "medio" | "bajo";
 export type EmployeeStatus = "activo" | "inactivo";

@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 export const Route = createFileRoute("/_app/auditoria")({
-  head: () => ({ meta: [{ title: "Auditoría · LaborApp" }] }),
+  head: () => ({ meta: [{ title: "Auditoría · VinApp" }] }),
   component: AuditoriaPage,
 });
 

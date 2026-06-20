@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/colaboradores/nuevo-contrato")({
-  head: () => ({ meta: [{ title: "Crear desde contrato · LaborApp" }] }),
+  head: () => ({ meta: [{ title: "Crear desde contrato · VinApp" }] }),
   component: WizardPage,
 });
 

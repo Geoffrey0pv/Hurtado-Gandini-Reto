@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { VinculappBrand } from "@/components/brand/VinculappBrand";
+import { VinAppBrand } from "@/components/brand/VinAppBrand";
 
 type Link = { to: string; label: string };
 
@@ -21,7 +21,7 @@ export function MobileFullscreenMenu({
       >
         <SheetTitle className="sr-only">Menú principal</SheetTitle>
         <div className="flex h-16 items-center justify-between border-b border-border px-6">
-          <VinculappBrand />
+          <VinAppBrand />
         </div>
         <nav className="flex flex-col gap-1 px-6 pt-10">
           {links.map((l, i) => (

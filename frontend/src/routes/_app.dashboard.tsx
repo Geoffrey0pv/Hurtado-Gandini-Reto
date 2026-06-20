@@ -23,7 +23,7 @@ type DashSearch = { vacio?: string };
 
 export const Route = createFileRoute("/_app/dashboard")({
   head: () => ({
-    meta: [{ title: "Panel · Vinculapp" }],
+    meta: [{ title: "Panel · VinApp" }],
   }),
   validateSearch: (s: Record<string, unknown>): DashSearch => ({
     vacio: typeof s.vacio === "string" ? s.vacio : undefined,

@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Bell, ChevronDown, Menu, Search, UserRound } from "lucide-react";
 import { useState } from "react";
-import { VinculappBrand } from "@/components/brand/VinculappBrand";
+import { VinAppBrand } from "@/components/brand/VinAppBrand";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,7 +32,7 @@ export function InstitutionalTopbar() {
       <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-4 px-4 sm:px-6 lg:px-10">
           <Link to="/dashboard" className="shrink-0">
-            <VinculappBrand />
+            <VinAppBrand />
           </Link>
 
           <nav className="ml-8 hidden flex-1 items-center gap-1 lg:flex">

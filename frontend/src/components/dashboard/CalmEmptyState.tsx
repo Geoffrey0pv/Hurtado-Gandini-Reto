@@ -24,7 +24,7 @@ export function CalmEmptyState() {
           “{quote}”
         </blockquote>
         <p className="mt-4 text-xs uppercase tracking-[0.22em] text-muted-foreground">
-          — Vinculapp
+          — VinApp
         </p>
 
         <div className="mt-8 flex flex-col items-center justify-center gap-3 opacity-100 transition-all duration-300 sm:flex-row md:translate-y-2 md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100">

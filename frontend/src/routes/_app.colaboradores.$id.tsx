@@ -36,7 +36,7 @@ const tabSchema = z.object({
 
 export const Route = createFileRoute("/_app/colaboradores/$id")({
   validateSearch: tabSchema,
-  head: () => ({ meta: [{ title: "Perfil · LaborApp" }] }),
+  head: () => ({ meta: [{ title: "Perfil · VinApp" }] }),
   component: ProfilePage,
 });
 

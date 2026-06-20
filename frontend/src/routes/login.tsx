@@ -10,8 +10,8 @@ import { ApiError } from "@/lib/api";
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
-      { title: "Ingreso · LaborApp" },
-      { name: "description", content: "Acceso a LaborApp, plataforma de compliance laboral de Hurtado Gandini." },
+      { title: "Ingreso · VinApp" },
+      { name: "description", content: "Acceso a VinApp, plataforma de compliance laboral de Hurtado Gandini." },
     ],
   }),
   component: LoginPage,
@@ -59,7 +59,10 @@ function LoginPage() {
         <HGLogo className="mb-10" />
         <div className="w-full rounded-3xl border border-border bg-card/80 p-8 shadow-[var(--shadow-elegant)] backdrop-blur-xl">
           <p className="text-[11px] uppercase tracking-[0.28em] text-primary">Plataforma jurídica</p>
-          <h1 className="mt-2 font-display text-4xl text-foreground">LaborApp</h1>
+          <h1 className="mt-2 font-display text-4xl">
+            <span className="text-foreground">Vin</span>
+            <span className="text-primary">App</span>
+          </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Compliance laboral asistido por IA, con revisión jurídica obligatoria.
           </p>

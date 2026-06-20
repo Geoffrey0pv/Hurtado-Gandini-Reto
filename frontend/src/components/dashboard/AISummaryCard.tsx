@@ -128,12 +128,12 @@ function summaryToText({ narrative, sections }: Summary) {
     month: "long",
     year: "numeric",
   });
-  const head = `Vinculapp — Resumen ejecutivo\n${today}\n\n`;
+  const head = `VinApp — Resumen ejecutivo\n${today}\n\n`;
   const body = `${narrative}\n\n— Detalle —\n\n`;
   const detail = sections
     .map((s) => `${s.title}\n${s.lines.map((l) => `  • ${l}`).join("\n")}`)
     .join("\n\n");
-  const foot = `\n\nGenerado por Vinculapp · Borrador IA, revisar antes de compartir.`;
+  const foot = `\n\nGenerado por VinApp · Borrador IA, revisar antes de compartir.`;
   return head + body + detail + foot;
 }
 
@@ -204,7 +204,7 @@ export function AISummaryCard({ employees }: { employees: Employee[] }) {
     const a = document.createElement("a");
     const stamp = new Date().toISOString().slice(0, 10);
     a.href = url;
-    a.download = `vinculapp-resumen-${stamp}.txt`;
+    a.download = `vinapp-resumen-${stamp}.txt`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -228,7 +228,7 @@ export function AISummaryCard({ employees }: { employees: Employee[] }) {
           <div>
             <h2 className="font-display text-2xl text-foreground">Resumen de hoy</h2>
             <p className="font-ui text-xs text-muted-foreground">
-              Generado por Vinculapp · revisado por ti
+              Generado por VinApp · revisado por ti
             </p>
           </div>
         </div>

@@ -78,10 +78,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "LaborApp · Hurtado Gandini" },
+      { title: "VinApp · Hurtado Gandini" },
       { name: "description", content: "Compliance laboral asistido por IA, con revisión jurídica obligatoria." },
       { name: "author", content: "Hurtado Gandini" },
-      { property: "og:title", content: "LaborApp · Hurtado Gandini" },
+      { property: "og:title", content: "VinApp · Hurtado Gandini" },
       { property: "og:description", content: "Compliance laboral asistido por IA, con revisión jurídica obligatoria." },
       { property: "og:type", content: "website" },
     ],

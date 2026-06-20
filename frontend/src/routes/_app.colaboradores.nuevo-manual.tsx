@@ -16,7 +16,7 @@ import { useCreateColaborador } from "@/hooks/useColaboradores";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/colaboradores/nuevo-manual")({
-  head: () => ({ meta: [{ title: "Crear manualmente · LaborApp" }] }),
+  head: () => ({ meta: [{ title: "Crear manualmente · VinApp" }] }),
   component: ManualWizard,
 });
 

@@ -24,6 +24,7 @@ import {
   Plus,
   Search,
   Trash2,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -55,7 +56,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/organizacion")({
-  head: () => ({ meta: [{ title: "Organización · LaborApp" }] }),
+  head: () => ({ meta: [{ title: "Organización · VinApp" }] }),
   component: OrgPage,
 });
 
@@ -82,25 +83,36 @@ function OrgPage() {
         title="Estructura organizacional"
         description="Visualiza, edita y reorganiza la jerarquía. Los cambios disparan una verificación en el perfil."
         actions={
-          <div className="inline-flex rounded-full border border-border-strong/60 bg-card p-1">
-            <button
-              onClick={() => setMode("tree")}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs",
-                mode === "tree" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-              )}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-full border border-border-strong/60 bg-card p-1">
+              <button
+                onClick={() => setMode("tree")}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs",
+                  mode === "tree" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Network className="h-3.5 w-3.5" />Vista árbol
+              </button>
+              <button
+                onClick={() => setMode("list")}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs",
+                  mode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <LayoutList className="h-3.5 w-3.5" />Vista lista
+              </button>
+            </div>
+            <Button
+              asChild
+              size="sm"
+              className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
             >
-              <Network className="h-3.5 w-3.5" />Vista árbol
-            </button>
-            <button
-              onClick={() => setMode("list")}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs",
-                mode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <LayoutList className="h-3.5 w-3.5" />Vista lista
-            </button>
+              <Link to="/colaboradores/nuevo-manual">
+                <UserPlus className="mr-1 h-3.5 w-3.5" />Nuevo colaborador
+              </Link>
+            </Button>
           </div>
         }
       />
