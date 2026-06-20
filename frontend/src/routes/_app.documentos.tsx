@@ -238,6 +238,30 @@ function formatCOP(n: number): string {
   }).format(n);
 }
 
+// Forma del JSON `extracted` que el pipeline guarda en la BD (ExtractionSchema).
+interface ExtractedData {
+  tipoContrato?: string | null;
+  nombreColaborador?: string | null;
+  cedula?: string | null;
+  cargo?: string | null;
+  fechaInicio?: string | null;
+  fechaFin?: string | null;
+  salario?: number | null;
+  jornadaHorasSemana?: number | null;
+  confianza?: number | null;
+}
+
+function DataField({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div className="rounded-xl border border-border bg-background/40 px-3 py-2.5">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={cn("mt-0.5 text-sm", value ? "text-foreground" : "text-muted-foreground/60")}>
+        {value ?? "No detectado"}
+      </p>
+    </div>
+  );
+}
+
 function DocumentoDetail({ contrato }: { contrato: BackendContrato }) {
   // Trae el detalle con la URL prefirmada de MinIO (se genera bajo demanda).
   const { data: detail } = useContrato(contrato.id);
@@ -245,59 +269,99 @@ function DocumentoDetail({ contrato }: { contrato: BackendContrato }) {
   const fileUrl = detail?.fileUrl ?? null;
   const fileName = c.fileKey.split("/").pop();
   const tipo = c.tipoContrato;
-  const salarioNum = c.salario != null ? Number(c.salario) : null;
+  const ex = (c.extracted ?? {}) as ExtractedData;
 
-  // Resumen compacto de contexto (sin tabla pesada): tipo, salario, jornada.
-  const chips = [
-    tipo ? (TIPO_LABEL[tipo] ?? tipo) : null,
-    salarioNum != null ? formatCOP(salarioNum) : null,
-    c.jornadaHorasSemana != null ? `${c.jornadaHorasSemana} h/semana` : null,
-  ].filter(Boolean) as string[];
+  // Variables extraídas: priorizamos las columnas tipadas del contrato y
+  // completamos con el JSON `extracted` para los campos sin columna propia.
+  const salarioNum = c.salario != null ? Number(c.salario) : ex.salario ?? null;
+  const jornada = c.jornadaHorasSemana ?? ex.jornadaHorasSemana ?? null;
+  const confianza = typeof ex.confianza === "number" ? Math.round(ex.confianza * 100) : null;
+
+  const campos: { label: string; value: string | null }[] = [
+    { label: "Tipo de contrato", value: tipo ? TIPO_LABEL[tipo] ?? tipo : null },
+    { label: "Colaborador", value: ex.nombreColaborador ?? null },
+    { label: "Cédula", value: ex.cedula ?? null },
+    { label: "Cargo", value: ex.cargo ?? null },
+    { label: "Fecha de inicio", value: c.fechaInicio ?? ex.fechaInicio ?? null },
+    { label: "Fecha de terminación", value: c.fechaFin ?? ex.fechaFin ?? null },
+    { label: "Salario", value: salarioNum != null ? formatCOP(salarioNum) : null },
+    { label: "Jornada", value: jornada != null ? `${jornada} h/semana` : null },
+  ];
+
+  const yaExtraido = c.status === "DONE" || campos.some((f) => f.value);
 
   return (
-    <div className="flex h-full flex-col">
-      <p className="text-[11px] uppercase tracking-[0.22em] text-primary">
-        {tipo ? (TIPO_LABEL[tipo] ?? tipo) : "Contrato"}
-      </p>
-      <h2 className="mt-2 break-all font-display text-2xl text-foreground">{fileName}</h2>
-      <p className="mt-1 text-xs text-muted-foreground">Cargado el {c.createdAt.slice(0, 10)}</p>
-
-      {chips.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {chips.map((ch) => (
-            <span key={ch} className="rounded-full border border-border bg-background/40 px-3 py-1 text-xs text-muted-foreground">
-              {ch}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Visor del archivo en MinIO */}
-      <div className="mt-4">
-        {fileUrl ? (
-          <a href={fileUrl} target="_blank" rel="noreferrer">
-            <Button variant="outline" className="w-full rounded-full">
-              <ExternalLink className="mr-2 h-4 w-4" />Ver archivo (PDF)
-            </Button>
-          </a>
-        ) : (
-          <Button variant="outline" className="w-full rounded-full" disabled>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />Generando enlace…
-          </Button>
-        )}
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Encabezado del documento */}
+      <div className="shrink-0">
+        <p className="text-[11px] uppercase tracking-[0.22em] text-primary">
+          {tipo ? TIPO_LABEL[tipo] ?? tipo : "Contrato"}
+        </p>
+        <h2 className="mt-2 break-all font-display text-2xl text-foreground">{fileName}</h2>
+        <p className="mt-1 text-xs text-muted-foreground">Cargado el {c.createdAt.slice(0, 10)}</p>
       </div>
 
-      {/* Revisión jurídica conversacional (RAG) */}
-      <div className="mt-4 min-h-0 flex-1">
-        {c.status === "DONE" ? (
-          <RagChat contratoId={c.id} />
-        ) : (
-          <p className="rounded-xl border border-border bg-background/40 p-4 text-sm text-muted-foreground">
-            {c.status === "FAILED"
-              ? "El procesamiento del documento falló; no es posible revisarlo."
-              : "El documento sigue en procesamiento. La revisión jurídica estará disponible al terminar."}
-          </p>
-        )}
+      {/* Zona desplazable: tarjeta de variables extraídas + chat de revisión */}
+      <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
+        {/* Tarjeta del contrato con las variables extraídas (desde la BD) */}
+        <section className="rounded-2xl border border-border bg-card/60 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-display text-base text-foreground">Variables extraídas</h3>
+            {confianza != null && (
+              <StatusBadge tone={confianza >= 75 ? "success" : confianza >= 50 ? "warning" : "muted"}>
+                Confianza IA {confianza}%
+              </StatusBadge>
+            )}
+          </div>
+
+          {yaExtraido ? (
+            <>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {campos.map((f) => (
+                  <DataField key={f.label} label={f.label} value={f.value} />
+                ))}
+              </div>
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                Datos extraídos por IA. Requieren validación humana antes de tener efectos jurídicos.
+              </p>
+            </>
+          ) : (
+            <p className="mt-3 rounded-xl border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+              {c.status === "FAILED"
+                ? "La extracción del documento falló; no hay variables disponibles."
+                : "El documento sigue en procesamiento. Las variables aparecerán al terminar la extracción."}
+            </p>
+          )}
+
+          {/* Visor del archivo en MinIO */}
+          <div className="mt-4">
+            {fileUrl ? (
+              <a href={fileUrl} target="_blank" rel="noreferrer">
+                <Button variant="outline" className="w-full rounded-full">
+                  <ExternalLink className="mr-2 h-4 w-4" />Ver archivo (PDF)
+                </Button>
+              </a>
+            ) : (
+              <Button variant="outline" className="w-full rounded-full" disabled>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />Generando enlace…
+              </Button>
+            )}
+          </div>
+        </section>
+
+        {/* Revisión jurídica conversacional (RAG) */}
+        <div className="flex min-h-[320px] flex-1 flex-col">
+          <h3 className="mb-2 shrink-0 font-display text-base text-foreground">Revisión jurídica</h3>
+          {c.status === "DONE" ? (
+            <RagChat contratoId={c.id} />
+          ) : (
+            <p className="rounded-xl border border-border bg-background/40 p-4 text-sm text-muted-foreground">
+              {c.status === "FAILED"
+                ? "El procesamiento del documento falló; no es posible revisarlo."
+                : "El documento sigue en procesamiento. La revisión jurídica estará disponible al terminar."}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
