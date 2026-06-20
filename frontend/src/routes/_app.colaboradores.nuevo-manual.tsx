@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ChevronsUpDown, ShieldCheck, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ContextualSubnav } from "@/components/layout/ContextualSubnav";
@@ -10,9 +10,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { fuerosOptions } from "@/lib/mock/data";
 import { useAreas } from "@/hooks/useAreas";
-import { useCreateColaborador } from "@/hooks/useColaboradores";
+import { useColaboradores, useCreateColaborador } from "@/hooks/useColaboradores";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/colaboradores/nuevo-manual")({
@@ -34,12 +44,13 @@ const sections = [
 function ManualWizard() {
   const [step, setStep] = useState(0);
   const { data: areasData = [] } = useAreas();
+  const { data: colaboradoresData = [] } = useColaboradores();
   const areaNames = areasData.map((a) => a.nombre);
   const firstArea = areaNames[0] ?? "";
   const [data, setData] = useState({
     nombre: "", cedula: "", correo: "", telefono: "",
     tipoContrato: "Término indefinido", fechaInicio: "", fechaTerminacion: "",
-    cargo: "", area: firstArea, jefe: "",
+    cargo: "", area: firstArea, jefe: "", jefeId: "",
     salario: "", jornada: "Lunes a viernes, 8:00 a 17:00",
     obligaciones: "",
     fueros: [] as string[],
@@ -64,6 +75,9 @@ function ManualWizard() {
         email: data.correo || undefined,
         telefono: data.telefono || undefined,
         area: data.area || undefined,
+        // Solo persistimos el jefe si se eligió uno ya registrado (tiene id).
+        // Si se escribió un nombre nuevo (aún sin registrar) queda informativo.
+        jefeId: data.jefeId || undefined,
         fueros: data.fueros,
         estado: data.estado,
         estadoVinculacion: "activo",
@@ -154,7 +168,19 @@ function ManualWizard() {
               </Grid>
             )}
             {step === 3 && (
-              <Field label="Jefe inmediato"><Input value={data.jefe} onChange={(e) => set("jefe", e.target.value)} placeholder="Nombre y apellido" /></Field>
+              <Field label="Jefe inmediato">
+                <JefeCombobox
+                  value={data.jefe}
+                  options={colaboradoresData.map((c) => ({ id: c.id, nombre: c.nombre, cargo: c.cargo }))}
+                  onPick={({ nombre, id }) => {
+                    set("jefe", nombre);
+                    set("jefeId", id ?? "");
+                  }}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Elige un colaborador ya registrado (posible jefe) o escribe un nombre si aún no está en el sistema.
+                </p>
+              </Field>
             )}
             {step === 4 && (
               <Grid>
@@ -188,6 +214,7 @@ function ManualWizard() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   {Object.entries({
                     Nombre: data.nombre, Cédula: data.cedula, Cargo: data.cargo, Área: data.area,
+                    "Jefe inmediato": data.jefe ? `${data.jefe}${data.jefeId ? "" : " (sin registrar)"}` : "—",
                     Contrato: data.tipoContrato, Inicio: data.fechaInicio || "—",
                     Terminación: data.tipoContrato === "Término indefinido"
                       ? "Sin fecha (indefinido)"
@@ -224,6 +251,91 @@ function ManualWizard() {
         </div>
       </div>
     </div>
+  );
+}
+
+function JefeCombobox({
+  value,
+  options,
+  onPick,
+}: {
+  value: string;
+  options: { id: string; nombre: string; cargo: string | null }[];
+  onPick: (sel: { nombre: string; id: string | null }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  // ¿El texto escrito coincide exactamente con algún colaborador? Si no, y hay
+  // texto, ofrecemos la opción de usarlo como nombre nuevo (sin registrar).
+  const exactMatch = options.some((o) => o.nombre.toLowerCase() === search.trim().toLowerCase());
+  const showCustom = search.trim().length > 0 && !exactMatch;
+
+  return (
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearch(""); }}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          role="combobox"
+          aria-expanded={open}
+          className={cn(
+            "flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            value ? "text-foreground" : "text-muted-foreground",
+          )}
+        >
+          <span className="truncate">{value || "Selecciona o escribe un jefe"}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+        <Command>
+          <CommandInput
+            value={search}
+            onValueChange={setSearch}
+            placeholder="Buscar colaborador o escribir nombre…"
+          />
+          <CommandList>
+            {!showCustom && <CommandEmpty>Sin colaboradores. Escribe un nombre para usarlo.</CommandEmpty>}
+            {showCustom && (
+              <CommandGroup heading="Nuevo">
+                <CommandItem
+                  value={search}
+                  onSelect={() => {
+                    onPick({ nombre: search.trim(), id: null });
+                    setOpen(false);
+                    setSearch("");
+                  }}
+                >
+                  <UserPlus className="mr-2 h-4 w-4 text-primary" />
+                  Usar “{search.trim()}” (sin registrar)
+                </CommandItem>
+              </CommandGroup>
+            )}
+            {options.length > 0 && (
+              <CommandGroup heading="Colaboradores registrados">
+                {options.map((o) => (
+                  <CommandItem
+                    key={o.id}
+                    value={o.nombre}
+                    onSelect={() => {
+                      onPick({ nombre: o.nombre, id: o.id });
+                      setOpen(false);
+                      setSearch("");
+                    }}
+                  >
+                    <Check className={cn("mr-2 h-4 w-4", value === o.nombre ? "opacity-100" : "opacity-0")} />
+                    <span className="truncate">
+                      {o.nombre}
+                      {o.cargo ? <span className="text-muted-foreground"> · {o.cargo}</span> : null}
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
