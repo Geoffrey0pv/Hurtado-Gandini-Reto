@@ -35,10 +35,17 @@ export async function buildApp(): Promise<FastifyInstance> {
   // ── CORS ────────────────────────────────────────────────────────────
   await app.register(cors, {
     // En desarrollo aceptamos cualquier puerto de localhost (Vite puede elegir
-    // 8080/8081/5173 segun disponibilidad). En produccion solo FRONTEND_URL.
+    // 8080/8081/5173 segun disponibilidad). Tambien permitimos despliegues de
+    // Vercel (*.vercel.app) y tuneles Cloudflare (*.trycloudflare.com) para
+    // poder probar el frontend desplegado contra el backend local via tunel.
+    // En produccion solo FRONTEND_URL.
     origin:
       env.NODE_ENV === "development"
-        ? /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+        ? [
+            /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/,
+            /\.vercel\.app$/,
+            /\.trycloudflare\.com$/,
+          ]
         : [env.FRONTEND_URL],
     credentials: true,
   });
