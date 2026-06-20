@@ -232,6 +232,7 @@ export function backendToEmployee(
     obligaciones: [],
     alertasActivas: 0,
     origen: colab.origen,
+    contratoId: contrato?.id ?? null,
   };
 }
 

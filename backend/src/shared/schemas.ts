@@ -128,6 +128,13 @@ export const CreateNovedadSchema = z.object({
 });
 export type CreateNovedadInput = z.infer<typeof CreateNovedadSchema>;
 
+// Rango opcional para el calendario de obligaciones recurrentes.
+export const ObligacionesQuerySchema = z.object({
+  desde: isoDate.optional(),
+  hasta: isoDate.optional(),
+});
+export type ObligacionesQuery = z.infer<typeof ObligacionesQuerySchema>;
+
 // UUID en params de ruta.
 export const IdParamSchema = z.object({ id: z.uuid() });
 

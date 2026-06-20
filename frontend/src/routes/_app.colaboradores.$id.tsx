@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
 import { z } from "zod";
 import { AlertTriangle, Briefcase, CalendarDays, Check, ChevronLeft, ChevronRight, CircleDollarSign, Clock, Download, FileText, FilePlus2, Flag, IdCard, Mail, MessageSquare, Paperclip, Phone, Plus, Scale, Send, Shirt, ShieldAlert, ShieldCheck, Timer, Trash2, Umbrella, Wallet } from "lucide-react";
@@ -16,7 +16,7 @@ import { useDocumentos as useDocumentosAPI, useUploadDocumento, useDeleteDocumen
 import { useExpedientes, useCreateExpediente, useUpdateExpediente, useDebidoProceso } from "@/hooks/useDisciplinario";
 import { useNovedades as useNovedadesAPI, useCreateNovedad, useDeleteNovedad } from "@/hooks/useNovedades";
 import { useAlertas } from "@/hooks/useAlertas";
-import { useContratos } from "@/hooks/useContratos";
+import { useContratos, useContratoAnalisis, useContratoObligaciones } from "@/hooks/useContratos";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { VariablesCard } from "@/components/contratos/VariablesCard";
 import { LegalWarningBanner } from "@/components/common/LegalWarningBanner";
@@ -316,14 +316,67 @@ function ContratoTab({ empleado: e }: { empleado: Employee }) {
 
 type EmpForObligaciones = ReturnType<ReturnType<typeof useEmployees>["getEmployee"]> & {};
 
+function isoDeFecha(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Fuente de obligaciones: backend determinista (GET /contratos/:id/obligaciones)
+// cuando hay contrato; si no, cae al cálculo local equivalente. Trae una ventana
+// amplia y filtra en cliente para no refetchar al navegar el calendario.
+function useObligacionesFuente(e: Employee) {
+  const today = new Date();
+  const winStartISO = isoDeFecha(new Date(today.getFullYear(), today.getMonth() - 2, 1));
+  const winEndISO = isoDeFecha(new Date(today.getFullYear(), today.getMonth() + 14, 0));
+  const q = useContratoObligaciones(e.contratoId ?? "", winStartISO, winEndISO);
+  const usaBackend = !!e.contratoId && Array.isArray(q.data);
+  const events = q.data ?? [];
+
+  const enRango = useCallback(
+    (ini: Date, fin: Date): ObligacionEvento[] => {
+      const a = isoDeFecha(ini);
+      const b = isoDeFecha(fin);
+      // Sólo usamos el backend si el rango cae dentro de la ventana traída.
+      if (usaBackend && a >= winStartISO && b <= winEndISO) {
+        return events.filter((o) => o.fecha >= a && o.fecha <= b);
+      }
+      return obligacionesEnRango(e, ini, fin);
+    },
+    [usaBackend, events, e, winStartISO, winEndISO],
+  );
+
+  const proximas = useCallback(
+    (n: number, ref: Date = new Date()): ObligacionEvento[] => {
+      const fin = new Date(ref.getFullYear(), ref.getMonth() + 6, 0);
+      const a = isoDeFecha(ref);
+      const b = isoDeFecha(fin);
+      if (usaBackend && a >= winStartISO && b <= winEndISO) {
+        return events.filter((o) => o.fecha >= a && o.fecha <= b).slice(0, n);
+      }
+      return proximasObligaciones(e, n, ref);
+    },
+    [usaBackend, events, e, winStartISO, winEndISO],
+  );
+
+  return { enRango, proximas, usaBackend, isLoading: q.isLoading };
+}
+
 function ObligacionesTab({ empleado: e }: { empleado: NonNullable<EmpForObligaciones> }) {
-  const proximas = useMemo(() => proximasObligaciones(e, 24), [e]);
+  const { proximas: getProximas, usaBackend } = useObligacionesFuente(e);
+  const proximas = useMemo(() => getProximas(24), [getProximas]);
   const mensuales = proximas.filter((x) => x.frecuencia === "mensual").slice(0, 6);
   const anuales = proximas.filter((x) => x.frecuencia === "anual").slice(0, 8);
 
   return (
     <div className="grid gap-5 lg:grid-cols-2">
       <div className="space-y-5">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] text-muted-foreground">
+            Calendario determinista de obligaciones.
+          </p>
+          <StatusBadge tone={usaBackend ? "success" : "muted"}>
+            {usaBackend ? "Backend · trazable" : "Cálculo local"}
+          </StatusBadge>
+        </div>
         <ChecklistObligaciones
           title="Aportes mensuales"
           icon={<CalendarDays className="h-4 w-4" />}
@@ -826,7 +879,39 @@ const debidoProcesoChecklist = [
 function RiesgoTab({ empleado: e }: { empleado: Employee }) {
   const [escenario, setEscenario] = useState<"sin" | "con">("sin");
   const [checked, setChecked] = useState<Record<string, boolean>>({});
-  const liq = useMemo(() => liquidacion(e), [e]);
+
+  // Fuente autoritativa: el backend calcula la liquidación de forma determinista
+  // (GET /contratos/:id/analisis) y deja traza en auditoría. Si el colaborador
+  // aún no tiene contrato procesado, caemos al cálculo local equivalente.
+  const liqCliente = useMemo(() => liquidacion(e), [e]);
+  const analisisQ = useContratoAnalisis(e.contratoId ?? "", !!e.contratoId);
+  const bl = analisisQ.data?.liquidacion;
+  const usaBackend = !!e.contratoId && bl != null && bl.aplica !== false;
+
+  const liq = useMemo(() => {
+    if (!usaBackend || !bl) return liqCliente;
+    const val = (pred: (c: { concepto: string; valor: number }) => boolean) =>
+      bl.conceptos?.find(pred)?.valor ?? 0;
+    const cesantias = val((c) => c.concepto.toLowerCase().startsWith("cesant"));
+    const intereses = val((c) => c.concepto.toLowerCase().startsWith("interes"));
+    const prima = val((c) => c.concepto.toLowerCase().startsWith("prima"));
+    const vacaciones = val((c) => c.concepto.toLowerCase().startsWith("vacacion"));
+    const indemnizacion = bl.indemnizacionEstimada?.valor ?? 0;
+    const totalConJusta = bl.total ?? cesantias + intereses + prima + vacaciones;
+    const totalSinJusta = totalConJusta + indemnizacion;
+    const dias = bl.diasTrabajados ?? liqCliente.dias;
+    return {
+      ...liqCliente,
+      cesantias, intereses, prima, vacaciones,
+      indemnizacion,
+      indemDetalle: bl.indemnizacionEstimada
+        ? `${bl.indemnizacionEstimada.concepto} · ${bl.indemnizacionEstimada.baseLegal}`
+        : "Sin indemnización estimada (según tipo de contrato)",
+      totalConJusta, totalSinJusta,
+      dias, diasPrima: dias,
+    };
+  }, [usaBackend, bl, liqCliente]);
+
   const riesgo = useMemo(() => riesgoDespido(e), [e]);
   const { generar, get } = useLiquidaciones();
   const navigate = useNavigate();
@@ -869,7 +954,16 @@ function RiesgoTab({ empleado: e }: { empleado: Employee }) {
     <div className="space-y-5">
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="rounded-2xl border border-border bg-card p-5">
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Estimación de liquidación (si se desvincula hoy)</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Estimación de liquidación (si se desvincula hoy)</p>
+            {analisisQ.isLoading ? (
+              <StatusBadge tone="muted">Calculando…</StatusBadge>
+            ) : usaBackend ? (
+              <StatusBadge tone="success">Backend · trazable en auditoría</StatusBadge>
+            ) : (
+              <StatusBadge tone="muted">Cálculo local{e.contratoId ? "" : " (sin contrato procesado)"}</StatusBadge>
+            )}
+          </div>
           <div className="mt-4 space-y-1">
             <LiqRow k="Cesantías" sub="art. 249 CST" v={liq.cesantias} />
             <LiqRow k="Intereses a cesantías" sub="Ley 50/90" v={liq.intereses} />
@@ -892,7 +986,12 @@ function RiesgoTab({ empleado: e }: { empleado: Employee }) {
               <p className="text-foreground">{formatCOP(liq.totalConJusta)}</p>
             </div>
           </div>
-          <p className="mt-3 text-[11px] text-muted-foreground">Cálculo determinista (año comercial 360 días).</p>
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Cálculo determinista (año comercial 360 días).
+            {usaBackend
+              ? " Generado por el backend y registrado en auditoría (RULES_ANALYSIS, sin IA)."
+              : " Estimación local equivalente; se trazará en auditoría al procesar el contrato."}
+          </p>
 
           <div className="mt-4 flex flex-wrap gap-2">
             <button
@@ -1717,6 +1816,7 @@ function CalendarioTab({ empleado: e }: { empleado: Employee }) {
   const createNovedad = useCreateNovedad(e.id);
   const deleteNovedad = useDeleteNovedad(e.id);
   const { isDone, toggle: toggleObl } = useObligaciones();
+  const { enRango: obligEnRango } = useObligacionesFuente(e);
   const empNov = novedades;
   const today = useMemo(() => new Date(), []);
   const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
@@ -1734,7 +1834,7 @@ function CalendarioTab({ empleado: e }: { empleado: Employee }) {
   const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
   const obligacionesEv: CalEvent[] = useMemo(() => {
-    return obligacionesEnRango(e, monthStart, monthEnd).map((o) => ({
+    return obligEnRango(monthStart, monthEnd).map((o) => ({
       fecha: o.fecha,
       tipo: "obligacion",
       label: o.label,
@@ -1743,7 +1843,7 @@ function CalendarioTab({ empleado: e }: { empleado: Employee }) {
       eventId: o.id,
       frecuencia: o.frecuencia,
     }));
-  }, [e, monthStart.getTime(), monthEnd.getTime()]);
+  }, [obligEnRango, monthStart.getTime(), monthEnd.getTime()]);
 
   const novedadEventos: CalEvent[] = empNov.flatMap((n) => {
     const ini = parseISO(n.fecha);
@@ -1765,13 +1865,13 @@ function CalendarioTab({ empleado: e }: { empleado: Employee }) {
   // Próximos términos (siguientes 6 meses) — usa la misma fuente que la checklist
   const horizonte = new Date(today.getFullYear(), today.getMonth() + 6, 0);
   const proximos = useMemo(() => {
-    const allObl = obligacionesEnRango(e, today, horizonte);
+    const allObl = obligEnRango(today, horizonte);
     return allObl
       .map((o) => ({ ...o, dist: diffDays(today, parseISO(o.fecha)) }))
       .filter((o) => o.dist >= 0)
       .sort((a, b) => a.dist - b.dist)
       .slice(0, 6);
-  }, [e, today.getTime(), horizonte.getTime()]);
+  }, [obligEnRango, today.getTime(), horizonte.getTime()]);
 
   // Grilla del calendario
   const firstDow = (monthStart.getDay() + 6) % 7; // lun=0

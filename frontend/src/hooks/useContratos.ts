@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPatch, apiUpload } from "@/lib/api";
 import type { AnalisisContrato, BackendContrato } from "@/lib/types";
+import type { ObligacionEvento } from "@/lib/obligaciones";
 
 export interface UpdateContratoInput {
   tipoContrato?: string | null;
@@ -48,6 +49,27 @@ export function useContratoAnalisis(id: string, enabled = false) {
     queryFn: () => apiGet<AnalisisContrato>(`/contratos/${id}/analisis`),
     enabled: enabled && !!id,
     staleTime: 5 * 60 * 1000, // el endpoint deja audit log: evitamos refetch por montaje
+  });
+}
+
+// Calendario determinista de obligaciones recurrentes (PILA, nómina, prima,
+// cesantías, dotación) calculado por el backend a partir del contrato.
+export function useContratoObligaciones(
+  id: string | null | undefined,
+  desde?: string,
+  hasta?: string,
+) {
+  return useQuery({
+    queryKey: [...KEY, id, "obligaciones", desde ?? null, hasta ?? null],
+    queryFn: () => {
+      const qs = new URLSearchParams();
+      if (desde) qs.set("desde", desde);
+      if (hasta) qs.set("hasta", hasta);
+      const suffix = qs.toString() ? `?${qs.toString()}` : "";
+      return apiGet<ObligacionEvento[]>(`/contratos/${id}/obligaciones${suffix}`);
+    },
+    enabled: !!id,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

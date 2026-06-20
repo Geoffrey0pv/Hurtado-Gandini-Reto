@@ -1,12 +1,13 @@
 // src/modules/contratos/routes.ts — Subida de PDF y consulta de contratos.
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { IdParamSchema, UpdateContratoSchema } from "../../shared/schemas.js";
+import { IdParamSchema, ObligacionesQuerySchema, UpdateContratoSchema } from "../../shared/schemas.js";
 import { httpError } from "../../shared/errors.js";
 import { getTenant } from "../../shared/tenant.js";
 import { extractQueue } from "../../lib/queue.js";
 import { presignGet, uploadStream } from "../../lib/storage.js";
 import { analizarContrato } from "../../rules/analisis.js";
+import { obligacionesEnRango } from "../../rules/obligaciones.js";
 import { writeAuditLog } from "../../shared/audit.js";
 import { getColaborador } from "../colaboradores/service.js";
 import {
@@ -146,6 +147,31 @@ export async function contratosRoutes(app: FastifyInstance) {
     });
 
     return analisis;
+  });
+
+  // GET /contratos/:id/obligaciones?desde&hasta — calendario DETERMINISTA de
+  // obligaciones recurrentes (PILA, nómina, prima, cesantías, dotación) con monto
+  // y base legal. Sin IA. Por defecto: desde inicio del mes actual hasta +12 meses.
+  app.get("/:id/obligaciones", async (req) => {
+    const { organizationId } = getTenant(req);
+    const { id } = IdParamSchema.parse(req.params);
+    const { desde, hasta } = ObligacionesQuerySchema.parse(req.query);
+
+    const contrato = await getContrato(organizationId, id);
+    if (!contrato) throw httpError(404, "Contrato no encontrado");
+
+    const hoy = new Date();
+    const desdeDef = desde ?? `${hoy.getUTCFullYear()}-${String(hoy.getUTCMonth() + 1).padStart(2, "0")}-01`;
+    const hastaDef =
+      hasta ?? `${hoy.getUTCFullYear() + 1}-${String(hoy.getUTCMonth() + 1).padStart(2, "0")}-28`;
+
+    return obligacionesEnRango({
+      empleadoId: contrato.colaboradorId,
+      salario: contrato.salario != null ? Number(contrato.salario) : 0,
+      tipoContrato: contrato.tipoContrato,
+      desde: desdeDef,
+      hasta: hastaDef,
+    });
   });
 
   // GET /contratos/job/:id — estado del job de ingestion (para polling).

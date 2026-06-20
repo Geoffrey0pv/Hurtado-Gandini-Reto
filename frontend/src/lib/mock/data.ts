@@ -35,6 +35,9 @@ export type Employee = {
   manualFunciones?: { cargado: boolean; fecha?: string };
   alertasActivas: number;
   origen: "manual" | "contrato";
+  // Id del contrato "vigente" (DONE más reciente) si existe. Permite consultar
+  // el análisis determinista del backend (GET /contratos/:id/analisis).
+  contratoId?: string | null;
 };
 
 // SMMLV 2025 referencia (COP)
