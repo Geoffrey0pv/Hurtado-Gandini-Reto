@@ -18,6 +18,7 @@ import { useNovedades as useNovedadesAPI, useCreateNovedad, useDeleteNovedad } f
 import { useAlertas } from "@/hooks/useAlertas";
 import { useContratos } from "@/hooks/useContratos";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { VariablesCard } from "@/components/contratos/VariablesCard";
 import { LegalWarningBanner } from "@/components/common/LegalWarningBanner";
 import {
   antiguedad, aplicaDotacion, aportesMensuales, auxilioTransporte,
@@ -290,43 +291,23 @@ function ContratoTab({ empleado: e }: { empleado: Employee }) {
   }
 
   const estado = CONTRATO_ESTADO[contrato.status] ?? { label: contrato.status, tone: "muted" as const };
-  const tipoLabel = contrato.tipoContrato ? (CONTRATO_TIPO_LABEL[contrato.tipoContrato] ?? contrato.tipoContrato) : "—";
-  const salario = contrato.salario != null ? formatCOP(Number(contrato.salario)) : "—";
 
+  // Variables del contrato extraídas automáticamente y EDITABLES (corrección
+  // manual). El visor del PDF está dentro de la tarjeta.
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
-      <DossierCard title="Datos del contrato" icon={<FileText className="h-4 w-4" />}>
-        <Row k="Modalidad" v={tipoLabel} dot="ok" />
-        <Row k="Salario mensual" v={salario} dot="warn" />
-        <Row k="Inicio" v={contrato.fechaInicio ? formatDate(contrato.fechaInicio) : "—"} icon={<CalendarDays className="h-3 w-3" />} dot="ok" />
-        <Row k="Terminación" v={contrato.fechaFin ? formatDate(contrato.fechaFin) : "Indefinida"} icon={<CalendarDays className="h-3 w-3" />} dot="ok" />
-        <Row k="Jornada" v={contrato.jornadaHorasSemana != null ? `${contrato.jornadaHorasSemana} h/sem` : "—"} dot="ok" />
-      </DossierCard>
-
-      <DossierCard title="Documento" icon={<Paperclip className="h-4 w-4" />}>
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Estado de ingesta</span>
-          <StatusBadge tone={estado.tone}>{estado.label}</StatusBadge>
-        </div>
-        <p className="mt-4 text-[11px] uppercase tracking-wider text-muted-foreground">Archivo</p>
-        {contrato.fileUrl ? (
-          <a
-            href={contrato.fileUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-border bg-background/40 px-3 py-2 text-sm text-foreground hover:border-primary/40 hover:text-primary"
-          >
-            <Download className="h-4 w-4" /> Ver / descargar contrato
-          </a>
-        ) : (
-          <p className="mt-2 text-sm text-muted-foreground">El archivo aún no está disponible.</p>
-        )}
-        {contrato.status === "FAILED" && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            La extracción automática falló. El documento sigue disponible para revisión manual.
-          </p>
-        )}
-      </DossierCard>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          Datos del contrato (extraídos automáticamente; editables a mano).
+        </p>
+        <StatusBadge tone={estado.tone}>{estado.label}</StatusBadge>
+      </div>
+      <VariablesCard contrato={contrato} />
+      {contrato.status === "FAILED" && (
+        <p className="text-xs text-muted-foreground">
+          La extracción automática falló. Puedes corregir las variables manualmente con “Editar”.
+        </p>
+      )}
     </div>
   );
 }

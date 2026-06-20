@@ -15,8 +15,10 @@ import {
   useUpdateColaborador,
 } from "@/hooks/useColaboradores";
 import { useAreas, useCreateArea, useDeleteArea, useUpdateArea } from "@/hooks/useAreas";
+import { useContratos } from "@/hooks/useContratos";
 import { backendToEmployee, employeeToCreatePayload } from "./types";
 import type { Employee } from "./mock/data";
+import type { BackendContrato } from "./types";
 
 export type PendingCheck = {
   id: string;
@@ -53,6 +55,7 @@ export function EmployeesProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const { data: backendColabs = [], isLoading: loadingColabs } = useColaboradores();
   const { data: backendAreas = [], isLoading: loadingAreas } = useAreas();
+  const { data: backendContratos = [] } = useContratos();
   const createColaborador = useCreateColaborador();
   const updateColaborador = useUpdateColaborador();
   const createArea = useCreateArea();
@@ -81,13 +84,32 @@ export function EmployeesProvider({ children }: { children: ReactNode }) {
     return map;
   }, [backendColabs]);
 
+  // Contrato "vigente" por colaborador: preferimos el procesado (DONE) y, entre
+  // ellos, el más reciente. Sus datos (salario, jornada, tipo, fechas) alimentan
+  // el perfil automáticamente (extraídos del contrato), en vez de valores por defecto.
+  const contratoByColab = useMemo(() => {
+    const map = new Map<string, BackendContrato>();
+    for (const c of backendContratos) {
+      const prev = map.get(c.colaboradorId);
+      if (!prev) {
+        map.set(c.colaboradorId, c);
+        continue;
+      }
+      const mejor =
+        (c.status === "DONE" ? 1 : 0) - (prev.status === "DONE" ? 1 : 0) ||
+        c.createdAt.localeCompare(prev.createdAt);
+      if (mejor > 0) map.set(c.colaboradorId, c);
+    }
+    return map;
+  }, [backendContratos]);
+
   const employees: Employee[] = useMemo(
     () =>
       backendColabs.map((c) => {
         const jefe = c.jefeId ? colabById.get(c.jefeId) : undefined;
-        return backendToEmployee(c, undefined, jefe);
+        return backendToEmployee(c, contratoByColab.get(c.id), jefe);
       }),
-    [backendColabs, colabById],
+    [backendColabs, colabById, contratoByColab],
   );
 
   const areas: string[] = useMemo(
