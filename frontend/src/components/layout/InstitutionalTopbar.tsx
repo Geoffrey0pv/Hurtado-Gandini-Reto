@@ -1,5 +1,5 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import { Bell, ChevronDown, Menu, Search, UserRound } from "lucide-react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Bell, ChevronDown, LogOut, Menu, Search, UserRound } from "lucide-react";
 import { useState } from "react";
 import { VinAppBrand } from "@/components/brand/VinAppBrand";
 import {
@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { clearSession } from "@/lib/auth";
 import { MobileFullscreenMenu } from "./MobileFullscreenMenu";
 
 const links = [
@@ -26,6 +27,12 @@ const links = [
 export function InstitutionalTopbar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    clearSession();
+    navigate({ to: "/login" });
+  }
 
   return (
     <>
@@ -91,7 +98,9 @@ export function InstitutionalTopbar() {
                 <DropdownMenuItem><UserRound className="mr-2 h-4 w-4" />Mi perfil</DropdownMenuItem>
                 <DropdownMenuItem>Preferencias</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-primary">Cerrar sesión</DropdownMenuItem>
+                <DropdownMenuItem className="text-primary" onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" />Cerrar sesión
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
