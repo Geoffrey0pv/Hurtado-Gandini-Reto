@@ -88,8 +88,10 @@ function AlertasPage() {
                     {a.plazo && <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><CalendarClock className="h-3.5 w-3.5" />{a.plazo} días</span>}
                   </td>
                   <td className="px-5 py-4 text-right">
-                    <Button size="sm" variant="ghost" className="h-8 rounded-full text-xs text-muted-foreground hover:text-foreground">
-                      <CheckCircle2 className="mr-1 h-3.5 w-3.5" />Ver detalle
+                    <Button asChild size="sm" variant="ghost" className="h-8 rounded-full text-xs text-muted-foreground hover:text-foreground">
+                      <Link to="/colaboradores/$id" params={{ id: a.colaboradorId }}>
+                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" />Ver detalle
+                      </Link>
                     </Button>
                   </td>
                 </tr>

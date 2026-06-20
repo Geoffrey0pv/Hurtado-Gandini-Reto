@@ -11,7 +11,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { clearSession } from "@/lib/auth";
+import { clearSession, getUser, displayNameFromEmail, roleLabel, userInitials } from "@/lib/auth";
+import { useOrganizacion } from "@/hooks/useOrganizacion";
 import { MobileFullscreenMenu } from "./MobileFullscreenMenu";
 
 const links = [
@@ -28,6 +29,10 @@ export function InstitutionalTopbar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
+  const { data: organizacion } = useOrganizacion();
+  const user = getUser();
+  const nombreUsuario = displayNameFromEmail(user?.email);
+  const iniciales = userInitials(user?.email);
 
   function handleLogout() {
     clearSession();
@@ -66,10 +71,12 @@ export function InstitutionalTopbar() {
           </nav>
 
           <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-            <div className="hidden items-center gap-2 rounded-full border border-border-strong/60 px-3 py-1.5 text-xs text-muted-foreground md:flex">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-              Logística Andina S.A.
-            </div>
+            {organizacion?.name && (
+              <div className="hidden items-center gap-2 rounded-full border border-border-strong/60 px-3 py-1.5 text-xs text-muted-foreground md:flex">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                {organizacion.name}
+              </div>
+            )}
 
             <button className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-surface-elevated hover:text-foreground">
               <Search className="h-4 w-4" />
@@ -84,15 +91,15 @@ export function InstitutionalTopbar() {
             <DropdownMenu>
               <DropdownMenuTrigger className="ml-1 flex items-center gap-2 rounded-full border border-border-strong/60 py-1 pl-1 pr-3 text-sm text-foreground hover:bg-surface-elevated">
                 <span className="grid h-7 w-7 place-items-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary">
-                  MV
+                  {iniciales || "VA"}
                 </span>
-                <span className="hidden sm:inline">M. Villamil</span>
+                <span className="hidden sm:inline">{nombreUsuario}</span>
                 <ChevronDown className="hidden h-3.5 w-3.5 text-muted-foreground sm:inline" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>
-                  <div className="text-sm">Margarita Villamil</div>
-                  <div className="text-xs text-muted-foreground">Abogada laboral senior</div>
+                  <div className="text-sm">{nombreUsuario}</div>
+                  <div className="text-xs text-muted-foreground">{roleLabel(user?.role)}</div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem><UserRound className="mr-2 h-4 w-4" />Mi perfil</DropdownMenuItem>

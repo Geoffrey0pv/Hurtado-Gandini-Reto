@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPatch, apiUpload } from "@/lib/api";
+import { apiGet, apiPatch, apiPost, apiUpload } from "@/lib/api";
 import type { AnalisisContrato, BackendContrato } from "@/lib/types";
 import type { ObligacionEvento } from "@/lib/obligaciones";
 
@@ -105,6 +105,28 @@ export function useUpdateContrato() {
     onSuccess: (_r, { id }) => {
       qc.invalidateQueries({ queryKey: KEY });
       qc.invalidateQueries({ queryKey: [...KEY, id] });
+    },
+  });
+}
+
+// Revisión jurídica humana (aprobar/rechazar). Persiste la decisión en el
+// contrato y deja traza en auditoría (backend: POST /contratos/:id/revision).
+export function useRevisarContrato() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      decision,
+      nota,
+    }: {
+      id: string;
+      decision: "aprobado" | "rechazado";
+      nota?: string;
+    }) => apiPost<BackendContrato>(`/contratos/${id}/revision`, { decision, nota }),
+    onSuccess: (_r, { id }) => {
+      qc.invalidateQueries({ queryKey: KEY });
+      qc.invalidateQueries({ queryKey: [...KEY, id] });
+      qc.invalidateQueries({ queryKey: ["audit-logs"] });
     },
   });
 }

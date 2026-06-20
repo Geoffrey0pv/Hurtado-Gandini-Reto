@@ -13,8 +13,19 @@ import { Progress } from "@/components/ui/progress";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { useCreateColaborador } from "@/hooks/useColaboradores";
 import { useUploadContrato, useIngestionJob } from "@/hooks/useContratos";
+import { apiGet, apiPatch } from "@/lib/api";
+import type { BackendContrato } from "@/lib/types";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+const TIPO_LABEL: Record<string, string> = {
+  TERMINO_INDEFINIDO: "Contrato a término indefinido",
+  TERMINO_FIJO: "Contrato a término fijo",
+  OBRA_LABOR: "Obra o labor",
+  PRESTACION_SERVICIOS: "Prestación de servicios",
+  APRENDIZAJE: "Contrato de aprendizaje",
+  OTRO: "Otrosí",
+};
 
 export const Route = createFileRoute("/_app/colaboradores/nuevo-contrato")({
   head: () => ({ meta: [{ title: "Crear desde contrato · VinApp" }] }),
@@ -45,7 +56,7 @@ function extractionToFields(extracted: Record<string, unknown>): EditableField[]
   return Object.entries(map).map(([key, label]) => ({
     key,
     label,
-    value: extracted[key] != null ? String(extracted[key]) : "—",
+    value: extracted[key] != null ? String(extracted[key]) : "",
     confianza: typeof extracted.confianza === "number" ? Math.round(extracted.confianza * 100) : 50,
     fragmento: "",
   }));
@@ -58,6 +69,7 @@ function WizardPage() {
   const [fields, setFields] = useState<EditableField[]>([]);
   const [validated, setValidated] = useState(false);
   const [colaboradorId, setColaboradorId] = useState<string | null>(null);
+  const [contratoId, setContratoId] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -69,31 +81,32 @@ function WizardPage() {
   const { data: jobData } = useIngestionJob(jobId);
 
   useEffect(() => {
-    if (!jobData) return;
+    if (!jobData || !contratoId) return;
     if (jobData.status === "DONE") {
-      // Fetch the full contrato to get extracted fields
-      import("@/lib/api").then(({ apiGet }) => {
-        apiGet<{ extracted: Record<string, unknown> }>(`/contratos/job/${jobId}`)
-          .catch(() => null)
-          .then(() => {});
-      });
-      // Move to classification step with fields
-      setFields([
-        { key: "tipoContrato", label: "Tipo de contrato", value: "TERMINO_INDEFINIDO", confianza: 80, fragmento: "" },
-        { key: "nombreColaborador", label: "Nombre del colaborador", value: "", confianza: 50, fragmento: "" },
-        { key: "cedula", label: "Cédula", value: "", confianza: 50, fragmento: "" },
-        { key: "cargo", label: "Cargo", value: "", confianza: 50, fragmento: "" },
-        { key: "fechaInicio", label: "Fecha de inicio", value: "", confianza: 60, fragmento: "" },
-        { key: "fechaFin", label: "Fecha de terminación", value: "—", confianza: 60, fragmento: "" },
-        { key: "salario", label: "Salario (COP)", value: "", confianza: 70, fragmento: "" },
-        { key: "jornadaHorasSemana", label: "Jornada (h/semana)", value: "42", confianza: 75, fragmento: "" },
-      ]);
-      setStep(1);
+      // Lee el contrato ya procesado y usa la extracción REAL de la IA para
+      // poblar los campos de validación humana (no valores fijos).
+      let cancelled = false;
+      apiGet<BackendContrato>(`/contratos/${contratoId}`)
+        .then((contrato) => {
+          if (cancelled) return;
+          const extracted = (contrato.extracted ?? {}) as Record<string, unknown>;
+          setFields(extractionToFields(extracted));
+          const tipo = contrato.tipoContrato ?? (extracted.tipoContrato as string | undefined);
+          if (tipo && TIPO_LABEL[tipo]) setDocType(TIPO_LABEL[tipo]);
+          setStep(1);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          toast.error("No se pudo leer la extracción del contrato");
+        });
+      return () => {
+        cancelled = true;
+      };
     } else if (jobData.status === "FAILED") {
       toast.error("Error al procesar el contrato", { description: jobData.error ?? undefined });
       setJobId(null);
     }
-  }, [jobData, jobId]);
+  }, [jobData, contratoId]);
 
   async function startProcessing() {
     if (!file) return;
@@ -108,6 +121,7 @@ function WizardPage() {
 
       // Step 2: Upload the PDF
       const result = await uploadContrato.mutateAsync({ colaboradorId: colab.id, file });
+      setContratoId(result.contratoId);
       setJobId(result.jobId);
       toast.info("Contrato en cola de procesamiento…");
     } catch {
@@ -115,23 +129,47 @@ function WizardPage() {
     }
   }
 
+  const get = (k: string) => fields.find((f) => f.key === k)?.value ?? "";
+
   async function commit() {
     if (!colaboradorId) return;
-    const get = (k: string) => fields.find((f) => f.key === k)?.value ?? "";
+    const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(/[^\d.]/g, "")));
     try {
-      await import("@/lib/api").then(({ apiPatch }) =>
-        apiPatch(`/colaboradores/${colaboradorId}`, {
-          nombre: get("nombreColaborador") || "Colaborador",
-          cedula: get("cedula") || `TEMP-${Date.now()}`,
-          cargo: get("cargo") || undefined,
-          origen: "contrato",
-        }),
-      );
+      // 1) Persistir los datos validados del colaborador.
+      await apiPatch(`/colaboradores/${colaboradorId}`, {
+        nombre: get("nombreColaborador") || "Colaborador",
+        cedula: get("cedula") || `TEMP-${Date.now()}`,
+        cargo: get("cargo") || undefined,
+        origen: "contrato",
+      });
+      // 2) Persistir las variables validadas del contrato (corrección humana),
+      //    que queda trazada en auditoría (CONTRACT_MANUAL_FIX).
+      if (contratoId) {
+        await apiPatch(`/contratos/${contratoId}`, {
+          tipoContrato: get("tipoContrato") || null,
+          nombreColaborador: get("nombreColaborador") || null,
+          cedula: get("cedula") || null,
+          cargo: get("cargo") || null,
+          fechaInicio: get("fechaInicio") || null,
+          fechaFin: get("fechaFin") || null,
+          salario: num(get("salario")),
+          jornadaHorasSemana: num(get("jornadaHorasSemana")),
+        });
+      }
       toast.success("Perfil creado", { description: "El colaborador fue registrado tras tu validación." });
       navigate({ to: "/colaboradores/$id", params: { id: colaboradorId } });
     } catch {
       toast.error("Error al guardar el colaborador");
     }
+  }
+
+  // El colaborador y el contrato ya existen en el backend; "Guardar como
+  // borrador" simplemente abre el perfil para continuar después sin marcar la
+  // validación humana como completada.
+  function saveDraft() {
+    if (!colaboradorId) return;
+    toast.message("Guardado como borrador", { description: "Puedes retomar la validación desde el perfil." });
+    navigate({ to: "/colaboradores/$id", params: { id: colaboradorId } });
   }
 
   const isProcessing = uploadContrato.isPending || (jobId !== null && jobData?.status !== "DONE" && jobData?.status !== "FAILED");
@@ -276,7 +314,7 @@ function WizardPage() {
             </label>
 
             <div className="flex flex-wrap justify-end gap-3">
-              <Button variant="outline" className="rounded-full border-border-strong/60">Guardar como borrador</Button>
+              <Button variant="outline" className="rounded-full border-border-strong/60" onClick={saveDraft}>Guardar como borrador</Button>
               <Button disabled={!validated} onClick={commit} className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90">
                 Crear perfil laboral
               </Button>

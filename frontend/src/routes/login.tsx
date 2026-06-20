@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { loginRequest } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -113,7 +114,18 @@ function LoginPage() {
           </form>
 
           <div className="mt-6 flex items-center justify-between text-xs text-muted-foreground">
-            <button type="button" className="hover:text-foreground">¿Olvidó su contraseña?</button>
+            <button
+              type="button"
+              className="hover:text-foreground"
+              onClick={() =>
+                toast("Restablecer contraseña", {
+                  description:
+                    "El restablecimiento aún no está disponible en línea. Contacta al administrador de tu organización para reasignar tu acceso.",
+                })
+              }
+            >
+              ¿Olvidó su contraseña?
+            </button>
             <span className="rounded-full border border-border-strong/60 px-2 py-0.5">SSO próximamente</span>
           </div>
         </div>

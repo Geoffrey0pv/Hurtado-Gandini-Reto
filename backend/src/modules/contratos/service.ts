@@ -107,6 +107,41 @@ export async function updateContratoExtraido(
   return updated;
 }
 
+// Persiste la decisión de revisión jurídica (aprobado/rechazado) dentro del JSON
+// `extracted` del contrato, sin tocar las variables ya extraídas. La trazabilidad
+// (quién, cuándo, qué) se registra aparte en audit_logs desde la ruta.
+export async function setContratoRevision(
+  orgId: string,
+  id: string,
+  data: { decision: "aprobado" | "rechazado"; nota?: string; userId?: string | null },
+) {
+  const [contrato] = await db
+    .select()
+    .from(contratos)
+    .where(and(eq(contratos.organizationId, orgId), eq(contratos.id, id)))
+    .limit(1);
+  if (!contrato) return null;
+
+  const prevExtracted = (contrato.extracted ?? {}) as Record<string, unknown>;
+  const mergedExtracted: Record<string, unknown> = {
+    ...prevExtracted,
+    revision: {
+      decision: data.decision,
+      nota: data.nota ?? null,
+      decididoPor: data.userId ?? null,
+      decididoEn: new Date().toISOString(),
+    },
+  };
+
+  const [updated] = await db
+    .update(contratos)
+    .set({ extracted: mergedExtracted })
+    .where(and(eq(contratos.organizationId, orgId), eq(contratos.id, id)))
+    .returning();
+
+  return updated;
+}
+
 export async function getIngestionJob(orgId: string, jobId: string) {
   const [row] = await db
     .select()

@@ -1,3 +1,12 @@
+// liquidacion-store — Estado de liquidaciones generadas, pago y mora (art. 65 CST).
+//
+// DECISIÓN DE ARQUITECTURA: este estado es intencionalmente client-side
+// (localStorage), porque el backend NO expone hoy un módulo de liquidaciones/pagos
+// (la API solo calcula la estimación determinista en GET /contratos/:id/analisis).
+// El cálculo autoritativo de los conceptos viene del backend; aquí solo se guarda
+// la decisión operativa de "liquidación generada" y el seguimiento de mora para el
+// usuario. Si en el futuro se agrega un módulo /liquidaciones al backend, este
+// store debe reemplazarse por un hook de TanStack Query equivalente.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 export type LiquidacionGenerada = {

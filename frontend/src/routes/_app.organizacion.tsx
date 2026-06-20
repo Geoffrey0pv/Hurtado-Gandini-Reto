@@ -32,6 +32,8 @@ import {
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useEmployees } from "@/lib/store";
+import { useOrganizacion, useUpdateOrganizacion } from "@/hooks/useOrganizacion";
+import { getUser } from "@/lib/auth";
 import {
   antiguedad,
   cumplimientoDe,
@@ -144,15 +146,21 @@ function CreateAreaDialog() {
 function OrgPage() {
   const [mode, setMode] = useState<"tree" | "list">("tree");
   const [selected, setSelected] = useState<Employee | null>(null);
+  const { data: organizacion } = useOrganizacion();
 
   return (
     <div>
       <PageHeader
         eyebrow="Estructura"
         title="Estructura organizacional"
-        description="Visualiza, edita y reorganiza la jerarquía. Los cambios disparan una verificación en el perfil."
+        description={
+          organizacion?.name
+            ? `Visualiza, edita y reorganiza la jerarquía de ${organizacion.name}. Los cambios disparan una verificación en el perfil.`
+            : "Visualiza, edita y reorganiza la jerarquía. Los cambios disparan una verificación en el perfil."
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <OrgNameEditor />
             <div className="inline-flex rounded-full border border-border-strong/60 bg-card p-1">
               <button
                 onClick={() => setMode("tree")}
@@ -200,6 +208,55 @@ function OrgPage() {
   );
 }
 
+// Edición del nombre de la organización (solo admin). PATCH /organizations/me.
+function OrgNameEditor() {
+  const { data: organizacion } = useOrganizacion();
+  const update = useUpdateOrganizacion();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const isAdmin = getUser()?.role === "admin";
+
+  if (!isAdmin || !organizacion) return null;
+
+  async function save() {
+    const next = name.trim();
+    if (next.length < 2 || next === organizacion!.name) {
+      setOpen(false);
+      return;
+    }
+    try {
+      await update.mutateAsync({ name: next });
+      toast.success("Nombre de la organización actualizado");
+      setOpen(false);
+    } catch {
+      toast.error("No se pudo actualizar el nombre");
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (o) setName(organizacion.name); }}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="rounded-full border-border-strong/60">
+          <Pencil className="mr-1 h-3.5 w-3.5" />Editar empresa
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Nombre de la organización</DialogTitle>
+          <DialogDescription>Aparece en el panel, el organigrama y los documentos.</DialogDescription>
+        </DialogHeader>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre de la empresa" />
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setOpen(false)} disabled={update.isPending}>Cancelar</Button>
+          <Button onClick={save} disabled={update.isPending} className="bg-primary text-primary-foreground hover:bg-primary/90">
+            Guardar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ------------------------------ TREE VIEW ------------------------------ */
 
 const TREE_CSS = `
@@ -243,6 +300,7 @@ function balancedOrder<T>(items: T[]): T[] {
 
 function TreeView({ onSelect }: { onSelect: (e: Employee) => void }) {
   const { employees, areas, moveEmployee, renameArea, removeArea } = useEmployees();
+  const { data: organizacion } = useOrganizacion();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const activos = employees.filter((e) => e.estadoVinculacion === "activo");
@@ -321,7 +379,7 @@ function TreeView({ onSelect }: { onSelect: (e: Employee) => void }) {
           <ul className="org-tree mx-auto w-max">
             <li>
               <div className="node">
-                <CEOCard />
+                <CEOCard orgName={organizacion?.name} />
               </div>
               {groups.length > 0 && (
                 <ul>
@@ -371,7 +429,7 @@ function isDescendantOf(candidate: Employee, ancestorId: string, all: Employee[]
   return false;
 }
 
-function CEOCard() {
+function CEOCard({ orgName }: { orgName?: string }) {
   const { setNodeRef, isOver } = useDroppable({ id: "ceo" });
   return (
     <div
@@ -382,8 +440,8 @@ function CEOCard() {
       )}
     >
       <p className="text-[10px] uppercase tracking-[0.22em] text-primary">Dirección general</p>
-      <p className="mt-1 font-display text-base text-foreground">Ricardo Patiño</p>
-      <p className="text-[11px] text-muted-foreground">CEO · Logística Andina S.A.</p>
+      <p className="mt-1 font-display text-base text-foreground">{orgName ?? "Organización"}</p>
+      <p className="text-[11px] text-muted-foreground">Cúpula del organigrama</p>
     </div>
   );
 }

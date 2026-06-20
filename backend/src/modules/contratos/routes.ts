@@ -1,7 +1,7 @@
 // src/modules/contratos/routes.ts — Subida de PDF y consulta de contratos.
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { IdParamSchema, ObligacionesQuerySchema, UpdateContratoSchema } from "../../shared/schemas.js";
+import { IdParamSchema, ObligacionesQuerySchema, RevisionContratoSchema, UpdateContratoSchema } from "../../shared/schemas.js";
 import { httpError } from "../../shared/errors.js";
 import { getTenant } from "../../shared/tenant.js";
 import { extractQueue } from "../../lib/queue.js";
@@ -15,6 +15,7 @@ import {
   getContrato,
   getIngestionJob,
   listContratos,
+  setContratoRevision,
   updateContratoExtraido,
 } from "./service.js";
 
@@ -114,6 +115,36 @@ export async function contratosRoutes(app: FastifyInstance) {
       entityId: id,
       aiModel: null, // correccion humana, no IA
       payload: { cambios },
+    });
+
+    return updated;
+  });
+
+  // POST /contratos/:id/revision — decisión jurídica humana (aprobado/rechazado).
+  // El contrato debe estar procesado (DONE). Persiste la decisión y deja traza en
+  // audit_logs: ninguna salida con efecto jurídico es válida sin esta aprobación.
+  app.post("/:id/revision", async (req) => {
+    const { organizationId, userId } = getTenant(req);
+    const { id } = IdParamSchema.parse(req.params);
+    const { decision, nota } = RevisionContratoSchema.parse(req.body);
+
+    const contrato = await getContrato(organizationId, id);
+    if (!contrato) throw httpError(404, "Contrato no encontrado");
+    if (contrato.status !== "DONE") {
+      throw httpError(409, "El contrato aún no está procesado; no puede revisarse");
+    }
+
+    const updated = await setContratoRevision(organizationId, id, { decision, nota, userId });
+    if (!updated) throw httpError(404, "Contrato no encontrado");
+
+    await writeAuditLog({
+      organizationId,
+      userId,
+      action: decision === "aprobado" ? "CONTRACT_APPROVED" : "CONTRACT_REJECTED",
+      entity: "contrato",
+      entityId: id,
+      aiModel: null, // decisión humana, no IA
+      payload: { decision, nota: nota ?? null },
     });
 
     return updated;

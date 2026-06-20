@@ -6,10 +6,11 @@ import { toast } from "sonner";
 import { ContextualSubnav } from "@/components/layout/ContextualSubnav";
 import { useEmployees } from "@/lib/store";
 import { useLiquidaciones, calcularMora } from "@/lib/liquidacion-store";
-import { diasEntre, NOVEDAD_LABEL, NOVEDAD_TONE, type NovedadTipo } from "@/lib/novedades-store";
 import { useObligaciones } from "@/lib/obligaciones-store";
-import { DOC_SLOTS } from "@/lib/documentos-store";
-import { ETAPAS, GRAVEDAD_LABEL, GRAVEDAD_TONE, type EtapaKey, type Gravedad } from "@/lib/disciplinario-store";
+import {
+  diasEntre, NOVEDAD_LABEL, NOVEDAD_TONE, type NovedadTipo,
+  DOC_SLOTS, ETAPAS, GRAVEDAD_LABEL, GRAVEDAD_TONE, type EtapaKey, type Gravedad,
+} from "@/lib/constants";
 import { obligacionesEnRango, proximasObligaciones, diasHabilesHasta, nivelAviso, avisosFrecuencia, type ObligacionEvento, type NivelAviso } from "@/lib/obligaciones";
 import { useTimesheetEntries, useAddTimesheetEntry, useDeleteTimesheetEntry } from "@/hooks/useTimesheet";
 import { useDocumentos as useDocumentosAPI, useUploadDocumento, useDeleteDocumento } from "@/hooks/useDocumentos";
@@ -24,7 +25,7 @@ import {
   antiguedad, aplicaDotacion, aportesMensuales, auxilioTransporte,
   calcularValorEntrada, cumplimientoDe, cumplimientoLabel, diasComerciales,
   FACTORES_HORA, jefeDisplay, liquidacion, presenciaLabel,
-  riesgoDespido, valorHoraOrdinaria, type Employee, type TipoHora,
+  riesgoDespido, SMMLV_2025, valorHoraOrdinaria, type Employee, type TipoHora,
 } from "@/lib/mock/data";
 import type { BackendTimesheetEntry } from "@/lib/types";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -169,7 +170,7 @@ function ProfilePage() {
                     {e.obligaciones.map((o) => (<li key={o}>· {o}</li>))}
                   </ul>
                 ) : (
-                  <ManualFuncionesEmpty nombre={e.nombre} />
+                  <ManualFuncionesEmpty nombre={e.nombre} empId={e.id} />
                 )}
               </div>
             </DossierCard>
@@ -1214,23 +1215,20 @@ function DisciplinarioTab({ empleado: e }: { empleado: Employee }) {
     const notificado = [...(exp?.notificado ?? []), { canal, fecha: new Date().toISOString().slice(0, 10) }];
     updateExpediente.mutate({ id, data: { notificado } });
   }
-  function remove(_id: string) {
-    // delete not wired yet
-  }
 
-  // Form state
+  // Form state. Los campos arrancan vacíos: el abogado documenta el caso real
+  // (no se pre-llenan con un caso de ejemplo).
   const hoy = new Date().toISOString().slice(0, 10);
-  const [hechos, setHechos] = useState("Abandono del puesto de trabajo por 2 horas sin autorización durante el turno.");
+  const [hechos, setHechos] = useState("");
   const [fechaHechos, setFechaHechos] = useState(hoy);
   const [gravedad, setGravedad] = useState<Gravedad>("leve");
-  const [norma, setNorma] = useState("Art. 7, lit. b, Reglamento Interno · art. 60 CST");
+  const [norma, setNorma] = useState("");
   const [fechaDiligencia, setFechaDiligencia] = useState(hoy);
-  const [hora, setHora] = useState("10:00 a.m.");
+  const [hora, setHora] = useState("");
   const [modalidad, setModalidad] = useState<"Presencial" | "Virtual">("Presencial");
-  const [lugar, setLugar] = useState("Sala de juntas");
-  const [asistentes, setAsistentes] = useState("Colaborador, Jefe inmediato, RRHH, Testigo");
-  const [ciudad, setCiudad] = useState("Medellín");
-  const [crearTeams, setCrearTeams] = useState(false);
+  const [lugar, setLugar] = useState("");
+  const [asistentes, setAsistentes] = useState("");
+  const [ciudad, setCiudad] = useState("");
 
   const cartaPreview = useMemo(() => buildCartaTexto({
     ciudad, hoy, nombre: e.nombre, cargo: e.cargo, area: e.area, cedula: e.cedula,
@@ -1306,13 +1304,6 @@ function DisciplinarioTab({ empleado: e }: { empleado: Employee }) {
                 >
                   Marcar como {selected.estado === "abierto" ? "cerrado" : "abierto"}
                 </button>
-                <button
-                  onClick={() => { if (confirm("¿Eliminar expediente?")) { remove(selected.id); setSelectedId(null); } }}
-                  className="rounded-full border border-border-strong px-2 py-1 text-xs text-muted-foreground hover:text-rose-300"
-                  aria-label="Eliminar"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
               </div>
             </header>
             <ol className="space-y-3">
@@ -1336,6 +1327,8 @@ function DisciplinarioTab({ empleado: e }: { empleado: Employee }) {
                 );
               })}
             </ol>
+
+            <DebidoProcesoPanel expedienteId={selected.id} />
 
             <div className="mt-5 border-t border-border pt-4">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Notificar al colaborador</p>
@@ -1432,11 +1425,6 @@ function DisciplinarioTab({ empleado: e }: { empleado: Employee }) {
           <input value={ciudad} onChange={(ev) => setCiudad(ev.target.value)} className={inputCls} />
         </Field>
 
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          <input type="checkbox" checked={crearTeams} onChange={(ev) => setCrearTeams(ev.target.checked)} />
-          Crear reunión en Microsoft Teams
-        </label>
-
         <button
           onClick={generar}
           className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
@@ -1448,6 +1436,51 @@ function DisciplinarioTab({ empleado: e }: { empleado: Employee }) {
           <pre className="whitespace-pre-wrap font-serif text-[13px] leading-relaxed text-foreground">{cartaPreview}</pre>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Checklist de debido proceso calculado por el backend (regla determinista) a
+// partir de las etapas del expediente. GET /disciplinario/:id/debido-proceso.
+interface DebidoProcesoResult {
+  totalPasos: number;
+  completados: number;
+  cumple: boolean;
+  porcentaje: number;
+  checklist: Array<{ clave: string; descripcion: string; baseLegal: string; cumplido: boolean }>;
+}
+
+function DebidoProcesoPanel({ expedienteId }: { expedienteId: string }) {
+  const { data, isLoading } = useDebidoProceso(expedienteId);
+  const result = data as DebidoProcesoResult | undefined;
+
+  if (isLoading) {
+    return <p className="mt-5 border-t border-border pt-4 text-xs text-muted-foreground">Evaluando debido proceso…</p>;
+  }
+  if (!result) return null;
+
+  return (
+    <div className="mt-5 border-t border-border pt-4">
+      <div className="flex items-center justify-between">
+        <p className="inline-flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+          <Scale className="h-3.5 w-3.5" />Debido proceso (regla determinista)
+        </p>
+        <StatusBadge tone={result.cumple ? "success" : "warning"}>
+          {result.completados}/{result.totalPasos} · {result.porcentaje}%
+        </StatusBadge>
+      </div>
+      <ul className="mt-3 space-y-1.5">
+        {result.checklist.map((p) => (
+          <li key={p.clave} className="flex items-start gap-2 text-sm">
+            <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border ${p.cumplido ? "border-emerald-400 bg-emerald-400/20 text-emerald-300" : "border-border text-muted-foreground"}`}>
+              {p.cumplido && <Check className="h-2.5 w-2.5" />}
+            </span>
+            <span className={p.cumplido ? "text-foreground" : "text-muted-foreground"}>
+              {p.descripcion} <span className="text-[11px] text-muted-foreground">· {p.baseLegal}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -1500,19 +1533,21 @@ function Kpi({ label, value, icon }: { label: string; value: string; icon?: Reac
     </div>
   );
 }
-function ManualFuncionesEmpty({ nombre }: { nombre: string }) {
+function ManualFuncionesEmpty({ nombre, empId }: { nombre: string; empId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const uploadDoc = useUploadDocumento(empId);
   return (
     <div className="mt-2 rounded-xl border border-dashed border-border bg-background/40 p-4">
       <p className="text-sm text-muted-foreground">
-        Sin manual de funciones cargado para {nombre.split(" ")[0]}. Las funciones se extraen automáticamente al subirlo.
+        Sin manual de funciones cargado para {nombre.split(" ")[0]}. Súbelo para guardarlo en el repositorio de documentos.
       </p>
       <button
         type="button"
+        disabled={uploadDoc.isPending}
         onClick={() => inputRef.current?.click()}
-        className="mt-3 inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20"
+        className="mt-3 inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-60"
       >
-        <FilePlus2 className="h-3.5 w-3.5" /> Añadir manual de funciones
+        <FilePlus2 className="h-3.5 w-3.5" /> {uploadDoc.isPending ? "Subiendo…" : "Añadir manual de funciones"}
       </button>
       <input
         ref={inputRef}
@@ -1521,7 +1556,15 @@ function ManualFuncionesEmpty({ nombre }: { nombre: string }) {
         className="hidden"
         onChange={(ev) => {
           const f = ev.target.files?.[0];
-          if (f) toast.success(`Manual recibido: ${f.name}`, { description: "Las funciones se extraerán y aparecerán aquí." });
+          if (f) {
+            uploadDoc.mutate(
+              { slotKey: "manual_funciones", file: f },
+              {
+                onSuccess: () => toast.success(`Manual cargado: ${f.name}`),
+                onError: () => toast.error("No se pudo subir el manual"),
+              },
+            );
+          }
           ev.target.value = "";
         }}
       />
@@ -1542,16 +1585,17 @@ function formatDate(iso: string) {
 
 function liquidacionCSV(e: Employee, liq: ReturnType<typeof liquidacion>, escenario: "sin" | "con") {
   
-  const auxApl = e.salario <= 2 * 1423500;
-  const auxV = auxApl ? Math.round(1423500 * 0.142) : 0;
+  const auxApl = e.salario <= 2 * SMMLV_2025;
+  const auxV = auxApl ? Math.round(SMMLV_2025 * 0.142) : 0;
   const base = e.salario + auxV;
+  const smmlvFmt = SMMLV_2025.toLocaleString("es-CO");
   const rows: string[][] = [
     ["Concepto", "Fórmula", "Variables", "Cálculo numérico", "Valor (COP)"],
     [
       "Auxilio de transporte",
       "Aplica si salario ≤ 2 SMMLV → 14.2% SMMLV",
-      `SMMLV=1.423.500; Salario=${e.salario}; ¿≤2 SMMLV?=${auxApl ? "Sí" : "No"}`,
-      auxApl ? `1.423.500 × 0,142 = ${auxV}` : "0",
+      `SMMLV=${smmlvFmt}; Salario=${e.salario}; ¿≤2 SMMLV?=${auxApl ? "Sí" : "No"}`,
+      auxApl ? `${smmlvFmt} × 0,142 = ${auxV}` : "0",
       String(auxV),
     ],
     [
@@ -1825,9 +1869,9 @@ function CalendarioTab({ empleado: e }: { empleado: Employee }) {
   // Vacaciones: 15 días hábiles / año causados proporcional a antigüedad
   const diasAntig = diasComerciales(e.fechaInicio);
   const vacCausadas = Math.floor((diasAntig / 360) * 15);
-  const vacUsadas = empNov
-    .filter((n) => n.tipo === "vacaciones")
-    .reduce((s, _n) => s + 0, 0); // novedades no tienen rango de fechas todavía
+  // Cada novedad de vacaciones es un registro con fecha única; la contamos como
+  // un (1) día tomado. (El backend de novedades no maneja rangos de fechas.)
+  const vacUsadas = empNov.filter((n) => n.tipo === "vacaciones").length;
   const vacDisponibles = Math.max(0, vacCausadas - vacUsadas);
 
   // Eventos del mes visible
@@ -2210,7 +2254,25 @@ function DocumentosTab({ empleado: e }: { empleado: Employee }) {
   const uploadDoc = useUploadDocumento(e.id);
   const deleteDoc = useDeleteDocumento(e.id);
   const { data: novedades = [] } = useNovedadesAPI(e.id);
-  const [note, setNoteLocal] = useState("");
+  // Bitácora: el backend no tiene endpoint de notas, pero al menos persistimos
+  // localmente por colaborador (antes era estado efímero que se perdía al salir).
+  const bitacoraKey = `laborapp.bitacora.v1:${e.id}`;
+  const [note, setNoteLocal] = useState(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      return window.localStorage.getItem(bitacoraKey) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(bitacoraKey, note);
+    } catch {
+      /* ignore */
+    }
+  }, [bitacoraKey, note]);
 
   const getFile = (empId: string, slotKey: string) =>
     apiDocs.find((d) => d.slotKey === slotKey);

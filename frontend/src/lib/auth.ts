@@ -1,19 +1,15 @@
 // lib/auth.ts — Estado de sesión JWT.
-import { apiPost } from "./api";
+// Las claves de localStorage y getToken viven en api.ts (fuente única); aquí solo
+// se gestionan guardado/limpieza de sesión y las peticiones de auth.
+import { apiPost, getToken, TOKEN_KEY, USER_KEY } from "./api";
+
+export { getToken };
 
 export interface AuthUser {
   id: string;
   email: string;
   role: string;
   organizationId: string;
-}
-
-const TOKEN_KEY = "laborapp-token";
-const USER_KEY = "laborapp-user";
-
-export function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(TOKEN_KEY);
 }
 
 export function getUser(): AuthUser | null {
@@ -28,6 +24,40 @@ export function getUser(): AuthUser | null {
 
 export function isAuthenticated(): boolean {
   return !!getToken();
+}
+
+const ROLE_LABEL: Record<string, string> = {
+  admin: "Administrador",
+  abogado: "Abogado laboral",
+  hr: "Talento Humano",
+};
+
+export function roleLabel(role?: string | null): string {
+  if (!role) return "Usuario";
+  return ROLE_LABEL[role] ?? role;
+}
+
+// Nombre legible derivado del email (no tenemos campo nombre en el backend de
+// usuarios). "ana.restrepo@empresa.com" → "Ana Restrepo".
+export function displayNameFromEmail(email?: string | null): string {
+  if (!email) return "Usuario";
+  const local = email.split("@")[0] ?? email;
+  return (
+    local
+      .split(/[._-]+/)
+      .filter(Boolean)
+      .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+      .join(" ") || email
+  );
+}
+
+export function userInitials(email?: string | null): string {
+  const name = displayNameFromEmail(email);
+  return name
+    .split(" ")
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("");
 }
 
 export function saveSession(token: string, user: AuthUser) {

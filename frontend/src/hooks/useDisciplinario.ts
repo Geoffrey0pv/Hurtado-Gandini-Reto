@@ -15,14 +15,6 @@ export function useExpedientes(colaboradorId?: string) {
   });
 }
 
-export function useExpediente(id: string) {
-  return useQuery({
-    queryKey: [...KEY, id],
-    queryFn: () => apiGet<BackendExpediente>(`/disciplinario/${id}`),
-    enabled: !!id,
-  });
-}
-
 export function useDebidoProceso(id: string, enabled = true) {
   return useQuery({
     queryKey: [...KEY, id, "debido-proceso"],

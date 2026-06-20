@@ -11,15 +11,44 @@ import {
   Loader2,
   Mic2,
   RefreshCw,
-  Send,
   Sparkles,
   Square,
   Volume2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { alertsSeed, auditSeed, reviewSeed, type Employee } from "@/lib/mock/data";
+import { type Employee } from "@/lib/mock/data";
+import { useAlertas } from "@/hooks/useAlertas";
+import { useAuditoria } from "@/hooks/useAuditoria";
+import { useContratos } from "@/hooks/useContratos";
+import type { BackendAlerta, BackendAuditLog, BackendContrato } from "@/lib/types";
 import { streamSpeech, type TtsHandle } from "@/lib/tts-player";
 import { cn } from "@/lib/utils";
+
+// Acciones de auditoría → etiqueta legible para el resumen.
+const AUDIT_ACTION_LABEL: Record<string, string> = {
+  EXTRACT_CONTRACT: "extrajo un contrato con IA",
+  RAG_RISK: "analizó riesgos de un contrato",
+  RAG_RISK_ABSTENTION: "se abstuvo de analizar (sin evidencia)",
+  CONTRACT_MANUAL_FIX: "corrigió variables de un contrato",
+  RULES_ANALYSIS: "calculó el análisis determinista",
+  CONTRACT_APPROVED: "aprobó un contrato en revisión",
+  CONTRACT_REJECTED: "rechazó un contrato en revisión",
+};
+
+function auditLabel(a: BackendAuditLog): string {
+  return AUDIT_ACTION_LABEL[a.action] ?? a.action.toLowerCase().replace(/_/g, " ");
+}
+
+function contratoConfianza(c: BackendContrato): number | null {
+  const ex = (c.extracted ?? null) as { confianza?: number } | null;
+  return typeof ex?.confianza === "number" ? Math.round(ex.confianza * 100) : null;
+}
+
+function sinRevisar(c: BackendContrato): boolean {
+  if (c.status !== "DONE" || c.extracted == null) return false;
+  const ex = c.extracted as { revision?: unknown };
+  return ex.revision == null;
+}
 
 type Section = {
   key: string;
@@ -33,13 +62,18 @@ type Summary = {
   sections: Section[];
 };
 
-function buildSummary(employees: Employee[]): Summary {
+function buildSummary(
+  employees: Employee[],
+  alertas: BackendAlerta[],
+  auditLogs: BackendAuditLog[],
+  enColaContratos: BackendContrato[],
+): Summary {
   const proximos = employees
     .filter((e) => e.tipoContrato === "Término fijo" && e.fechaTerminacion)
     .slice(0, 2);
-  const criticas = alertsSeed.filter((a) => a.severidad === "alta").slice(0, 2);
-  const recientes = auditSeed.slice(0, 2);
-  const enCola = reviewSeed.filter((r) => r.estado === "En cola");
+  const criticas = alertas.filter((a) => a.severidad === "alta").slice(0, 2);
+  const recientes = auditLogs.slice(0, 2);
+  const enCola = enColaContratos;
 
   const today = new Date().toLocaleDateString("es-CO", {
     weekday: "long",
@@ -52,9 +86,9 @@ function buildSummary(employees: Employee[]): Summary {
     `Buenos días. Hoy, ${today}, tu organización mantiene ${employees.length} colaboradores activos en nómina.`,
   );
   if (criticas.length) {
-    const nombres = criticas.map((a) => a.empleado).join(" y ");
+    const nombres = criticas.map((a) => a.nombre).join(" y ");
     partes.push(
-      `Hay ${alertsSeed.length} alertas abiertas, de las cuales ${criticas.length} son de severidad alta y requieren atención prioritaria: principalmente las de ${nombres}.`,
+      `Hay ${alertas.length} alertas abiertas, de las cuales ${criticas.length} son de severidad alta y requieren atención prioritaria: principalmente las de ${nombres}.`,
     );
   } else {
     partes.push(
@@ -72,16 +106,18 @@ function buildSummary(employees: Employee[]): Summary {
   }
   if (enCola.length) {
     partes.push(
-      `En la bandeja jurídica hay ${enCola.length} documentos esperando tu visto bueno; la IA ya hizo el borrador y la confianza promedio es alta.`,
+      `En la bandeja jurídica hay ${enCola.length} documentos esperando tu visto bueno; la IA ya hizo el borrador y requieren tu validación.`,
     );
   } else {
     partes.push(`La cola de revisión jurídica está al día, sin pendientes.`);
   }
-  partes.push(
-    `Como referencia rápida, lo último que se movió fue: ${recientes
-      .map((a) => `${a.usuario} ${a.accion.toLowerCase()}`)
-      .join(", y ")}.`,
-  );
+  if (recientes.length) {
+    partes.push(
+      `Como referencia rápida, lo último que se movió fue: ${recientes
+        .map((a) => auditLabel(a))
+        .join(", y ")}.`,
+    );
+  }
 
   const sections: Section[] = [
     {
@@ -89,7 +125,7 @@ function buildSummary(employees: Employee[]): Summary {
       title: "Alertas críticas",
       icon: <AlertOctagon className="h-4 w-4" />,
       lines: criticas.length
-        ? criticas.map((a) => `${a.empleado}: ${a.motivo} (límite ${a.fechaLimite}).`)
+        ? criticas.map((a) => `${a.nombre}: ${a.motivo}${a.plazo ? ` (límite ${a.plazo})` : ""}.`)
         : ["Ninguna alerta crítica abierta hoy."],
     },
     {
@@ -105,16 +141,20 @@ function buildSummary(employees: Employee[]): Summary {
       title: "Aprobaciones pendientes",
       icon: <Gavel className="h-4 w-4" />,
       lines: enCola.length
-        ? enCola
-            .slice(0, 3)
-            .map((r) => `${r.tipo} de ${r.empleado} (confianza ${r.confianza}%).`)
+        ? enCola.slice(0, 3).map((c) => {
+            const conf = contratoConfianza(c);
+            const nombre = c.fileKey.split("/").pop() ?? "Contrato";
+            return `${nombre}${conf != null ? ` (confianza ${conf}%)` : ""}.`;
+          })
         : ["Cola de revisión jurídica al día."],
     },
     {
       key: "recientes",
       title: "Hecho recientemente",
       icon: <History className="h-4 w-4" />,
-      lines: recientes.map((a) => `${a.usuario} ${a.accion.toLowerCase()} · ${a.fecha}.`),
+      lines: recientes.length
+        ? recientes.map((a) => `${auditLabel(a)} · ${a.createdAt.slice(0, 10)}.`)
+        : ["Sin actividad reciente registrada."],
     },
   ];
 
@@ -145,7 +185,17 @@ export function AISummaryCard({ employees }: { employees: Employee[] }) {
   const [voice, setVoice] = useState("alloy");
   const ttsRef = useRef<TtsHandle | null>(null);
 
-  const summary = useMemo(() => buildSummary(employees), [employees, refreshKey]);
+  const { data: alertas = [], refetch: refetchAlertas } = useAlertas();
+  const { data: auditLogs = [], refetch: refetchAudit } = useAuditoria();
+  const { data: contratos = [], refetch: refetchContratos } = useContratos();
+  const enCola = useMemo(() => contratos.filter(sinRevisar), [contratos]);
+
+  const summary = useMemo(
+    () => buildSummary(employees, alertas, auditLogs, enCola),
+    // refreshKey fuerza recomputar la narrativa ("Regenerar").
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [employees, alertas, auditLogs, enCola, refreshKey],
+  );
   const plainText = useMemo(() => summaryToText(summary), [summary]);
 
   useEffect(() => {
@@ -180,13 +230,17 @@ export function AISummaryCard({ employees }: { employees: Employee[] }) {
     }
   };
 
-  const regenerate = () => {
+  const regenerate = async () => {
     setLoading(true);
-    setTimeout(() => {
+    try {
+      await Promise.all([refetchAlertas(), refetchAudit(), refetchContratos()]);
       setRefreshKey((k) => k + 1);
-      setLoading(false);
       toast.success("Resumen actualizado");
-    }, 600);
+    } catch {
+      toast.error("No se pudo actualizar el resumen");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const copy = async () => {
@@ -210,12 +264,6 @@ export function AISummaryCard({ employees }: { employees: Employee[] }) {
     a.remove();
     URL.revokeObjectURL(url);
     toast.success("Resumen descargado");
-  };
-
-  const sendToTeams = () => {
-    toast.success("Enviado al canal #laboral de Teams", {
-      description: "Demo · la integración con Microsoft Teams se conectará próximamente.",
-    });
   };
 
   return (
@@ -352,12 +400,6 @@ export function AISummaryCard({ employees }: { employees: Employee[] }) {
             className="inline-flex items-center gap-2 rounded-full border border-border-strong/60 px-3 py-1.5 text-xs text-foreground transition hover:border-primary/40 hover:bg-surface-elevated"
           >
             <Download className="h-3.5 w-3.5" /> Descargar
-          </button>
-          <button
-            onClick={sendToTeams}
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition hover:bg-primary/90"
-          >
-            <Send className="h-3.5 w-3.5" /> Enviar por Teams
           </button>
         </div>
       </footer>

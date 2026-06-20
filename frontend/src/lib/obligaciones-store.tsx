@@ -1,3 +1,11 @@
+// obligaciones-store — Marca de "obligación cumplida" en el checklist/calendario.
+//
+// DECISIÓN DE ARQUITECTURA: este estado es intencionalmente client-side
+// (localStorage). El calendario de obligaciones recurrentes (PILA, prima,
+// cesantías, etc.) lo calcula el backend de forma determinista
+// (GET /contratos/:id/obligaciones); lo único que vive aquí es el "visto bueno"
+// operativo de cada ítem, que el backend no persiste hoy. Si se agrega un módulo
+// de cumplimiento al backend, reemplazar por un hook de TanStack Query.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 export type ObligacionDone = {

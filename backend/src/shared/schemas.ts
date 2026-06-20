@@ -198,6 +198,14 @@ export const UpdateContratoSchema = z.object({
 });
 export type UpdateContratoInput = z.infer<typeof UpdateContratoSchema>;
 
+// Revisión jurídica humana de un contrato (human-in-the-loop). La decisión queda
+// persistida en el contrato y trazada en audit_logs.
+export const RevisionContratoSchema = z.object({
+  decision: z.enum(["aprobado", "rechazado"]),
+  nota: z.string().max(2000).optional(),
+});
+export type RevisionContratoInput = z.infer<typeof RevisionContratoSchema>;
+
 // ── RAG: Requests ─────────────────────────────────────────────────────
 export const RagAnalyzeSchema = z.object({
   contratoId: z.uuid(),

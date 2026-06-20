@@ -17,6 +17,8 @@ import { useEmployees } from "@/lib/store";
 import { useDashboard } from "@/hooks/useDashboard";
 import { useAlertas } from "@/hooks/useAlertas";
 import { useAuditoria } from "@/hooks/useAuditoria";
+import { useOrganizacion } from "@/hooks/useOrganizacion";
+import { getUser, displayNameFromEmail } from "@/lib/auth";
 import { StatusBadge } from "@/components/common/StatusBadge";
 
 type DashSearch = { vacio?: string };
@@ -37,6 +39,9 @@ function DashboardPage() {
   const { data: summary } = useDashboard();
   const { data: alertas = [] } = useAlertas();
   const { data: auditLogs = [] } = useAuditoria();
+  const { data: organizacion } = useOrganizacion();
+  const nombreUsuario = displayNameFromEmail(getUser()?.email);
+  const nombreOrg = organizacion?.name ?? "tu organización";
 
   const proximos = employees.filter((e) => e.tipoContrato === "Término fijo");
   const criticas = alertas.filter((a) => a.severidad === "alta");
@@ -47,8 +52,8 @@ function DashboardPage() {
     <div>
       <PageHeader
         eyebrow="Panel ejecutivo"
-        title="Buenos días, Margarita"
-        description="Una vista calmada y trazable del estado laboral de Logística Andina S.A."
+        title={`Buenos días, ${nombreUsuario}`}
+        description={`Una vista calmada y trazable del estado laboral de ${nombreOrg}.`}
       />
 
       <div className="mx-auto max-w-[1440px] space-y-10 px-4 pb-16 sm:px-6 lg:px-10">
