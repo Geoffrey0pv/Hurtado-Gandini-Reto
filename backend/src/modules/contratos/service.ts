@@ -91,6 +91,7 @@ export async function updateContratoExtraido(
   // Reconciliar datos del colaborador (nombre/cargo) si se editaron.
   const colUpdate: Record<string, string> = {};
   if (data.nombreColaborador) colUpdate.nombre = data.nombreColaborador;
+  if (data.cedula) colUpdate.cedula = data.cedula;
   if (data.cargo) colUpdate.cargo = data.cargo;
   if (Object.keys(colUpdate).length > 0) {
     await db

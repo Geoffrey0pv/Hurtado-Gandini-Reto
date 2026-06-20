@@ -22,6 +22,18 @@ export interface BackendColaborador {
   fueros: string[] | null;
   arlNivel: number | null;
   origen: "manual" | "contrato";
+  tipoContrato:
+    | "TERMINO_FIJO"
+    | "TERMINO_INDEFINIDO"
+    | "OBRA_LABOR"
+    | "PRESTACION_SERVICIOS"
+    | "APRENDIZAJE"
+    | "OTRO"
+    | null;
+  fechaInicio: string | null;
+  fechaFin: string | null;
+  salario: string | null;
+  jornadaHorasSemana: number | null;
   createdAt: string;
 }
 
@@ -203,9 +215,16 @@ export function backendToEmployee(
   contrato?: BackendContrato,
   jefe?: BackendColaborador,
 ): Employee {
+  const tipoFromColab: ContractType = colab.tipoContrato
+    ? (CONTRACT_TYPE_MAP[colab.tipoContrato] ?? "Término indefinido")
+    : "Término indefinido";
   const tipoContrato: ContractType = contrato?.tipoContrato
     ? (CONTRACT_TYPE_MAP[contrato.tipoContrato] ?? "Término indefinido")
-    : "Término indefinido";
+    : tipoFromColab;
+
+  const jornadaFromColab = colab.jornadaHorasSemana
+    ? `${colab.jornadaHorasSemana} h/semana`
+    : "No especificada";
 
   return {
     id: colab.id,
@@ -217,13 +236,17 @@ export function backendToEmployee(
     area: colab.area ?? "Sin área",
     jefe: jefe ? jefe.nombre : "—",
     tipoContrato,
-    fechaInicio: contrato?.fechaInicio ?? colab.createdAt.slice(0, 10),
-    fechaTerminacion: contrato?.fechaFin ?? null,
+    fechaInicio: contrato?.fechaInicio ?? colab.fechaInicio ?? colab.createdAt.slice(0, 10),
+    fechaTerminacion: contrato?.fechaFin ?? colab.fechaFin ?? null,
     fechaRetiro: colab.estadoVinculacion === "retirado" ? colab.createdAt.slice(0, 10) : null,
-    salario: contrato?.salario != null ? Number(contrato.salario) : 0,
+    salario: contrato?.salario != null
+      ? Number(contrato.salario)
+      : colab.salario != null
+        ? Number(colab.salario)
+        : 0,
     jornada: contrato?.jornadaHorasSemana
       ? `${contrato.jornadaHorasSemana} h/semana`
-      : "No especificada",
+      : jornadaFromColab,
     estado: colab.estado,
     estadoVinculacion: colab.estadoVinculacion,
     presencia: colab.presencia,

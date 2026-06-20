@@ -46,6 +46,11 @@ export async function createColaborador(orgId: string, data: CreateColaboradorIn
       fueros: data.fueros ?? [],
       arlNivel: data.arlNivel ?? 2,
       origen: data.origen ?? "manual",
+      tipoContrato: data.tipoContrato ?? null,
+      fechaInicio: data.fechaInicio ?? null,
+      fechaFin: data.fechaFin ?? null,
+      salario: data.salario != null ? String(data.salario) : null,
+      jornadaHorasSemana: data.jornadaHorasSemana ?? null,
     })
     .returning();
   return row;
@@ -72,6 +77,13 @@ export async function updateColaborador(
   if (data.fueros !== undefined) patch.fueros = data.fueros;
   if (data.arlNivel !== undefined) patch.arlNivel = data.arlNivel;
   if (data.origen !== undefined) patch.origen = data.origen;
+  if (data.tipoContrato !== undefined) patch.tipoContrato = data.tipoContrato;
+  if (data.fechaInicio !== undefined) patch.fechaInicio = data.fechaInicio;
+  if (data.fechaFin !== undefined) patch.fechaFin = data.fechaFin;
+  if (data.salario !== undefined) {
+    patch.salario = data.salario != null ? String(data.salario) : null;
+  }
+  if (data.jornadaHorasSemana !== undefined) patch.jornadaHorasSemana = data.jornadaHorasSemana;
 
   const [row] = await db
     .update(colaboradores)

@@ -5,6 +5,11 @@ import { z } from "zod";
 // Fecha 'YYYY-MM-DD' (compatible con columnas `date` de Postgres/Drizzle).
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato esperado YYYY-MM-DD");
 
+export const CONTRACT_TYPES = [
+  "TERMINO_FIJO", "TERMINO_INDEFINIDO", "OBRA_LABOR",
+  "PRESTACION_SERVICIOS", "APRENDIZAJE", "OTRO",
+] as const;
+
 // ── Auth ──────────────────────────────────────────────────────────────
 export const RegisterSchema = z.object({
   orgName: z.string().min(2),
@@ -46,6 +51,11 @@ export const CreateColaboradorSchema = z.object({
   fueros: z.array(z.string()).optional(),
   arlNivel: z.number().int().min(1).max(5).optional(),
   origen: z.enum(["manual", "contrato"]).optional(),
+  tipoContrato: z.enum(CONTRACT_TYPES).nullable().optional(),
+  fechaInicio: isoDate.nullable().optional(),
+  fechaFin: isoDate.nullable().optional(),
+  salario: z.number().nonnegative().nullable().optional(),
+  jornadaHorasSemana: z.number().int().positive().nullable().optional(),
 });
 export type CreateColaboradorInput = z.infer<typeof CreateColaboradorSchema>;
 
@@ -144,10 +154,6 @@ export const IdParamSchema = z.object({ id: z.uuid() });
 // Todos los campos son nullable: el LLM debe poner null si no lo halla,
 // nunca inventar. Las columnas tipadas del contrato solo se llenan con lo
 // que pase esta validacion.
-export const CONTRACT_TYPES = [
-  "TERMINO_FIJO", "TERMINO_INDEFINIDO", "OBRA_LABOR",
-  "PRESTACION_SERVICIOS", "APRENDIZAJE", "OTRO",
-] as const;
 
 // Coerciones defensivas: el LLM (con format:"json") a veces devuelve tipos
 // laxos (cedula como numero, salario con separadores, jornada como string).

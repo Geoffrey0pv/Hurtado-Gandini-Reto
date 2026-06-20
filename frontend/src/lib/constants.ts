@@ -129,3 +129,12 @@ export function diasEntre(desde: string, hasta: string): number {
   if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || b < a) return 0;
   return Math.floor((b.getTime() - a.getTime()) / 86_400_000) + 1;
 }
+
+// Fueros / estabilidades reforzadas reconocidas en el perfil del colaborador.
+export const FUEROS_OPTIONS = [
+  "Fuero sindical",
+  "Fuero de maternidad / lactancia",
+  "Fuero de paternidad",
+  "Fuero por discapacidad",
+  "Estabilidad reforzada (accidente de trabajo)",
+] as const;

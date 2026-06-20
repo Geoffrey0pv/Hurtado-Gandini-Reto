@@ -10,6 +10,7 @@ import { useObligaciones } from "@/lib/obligaciones-store";
 import {
   diasEntre, NOVEDAD_LABEL, NOVEDAD_TONE, type NovedadTipo,
   DOC_SLOTS, ETAPAS, GRAVEDAD_LABEL, GRAVEDAD_TONE, type EtapaKey, type Gravedad,
+  FUEROS_OPTIONS,
 } from "@/lib/constants";
 import { obligacionesEnRango, proximasObligaciones, diasHabilesHasta, nivelAviso, avisosFrecuencia, type ObligacionEvento, type NivelAviso } from "@/lib/obligaciones";
 import { useTimesheetEntries, useAddTimesheetEntry, useDeleteTimesheetEntry } from "@/hooks/useTimesheet";
@@ -17,7 +18,7 @@ import { useDocumentos as useDocumentosAPI, useUploadDocumento, useDeleteDocumen
 import { useExpedientes, useCreateExpediente, useUpdateExpediente, useDebidoProceso } from "@/hooks/useDisciplinario";
 import { useNovedades as useNovedadesAPI, useCreateNovedad, useDeleteNovedad } from "@/hooks/useNovedades";
 import { useAlertas } from "@/hooks/useAlertas";
-import { useContratos, useContratoAnalisis, useContratoObligaciones } from "@/hooks/useContratos";
+import { useContratos, useContratoAnalisis, useContratoObligaciones, useUpdateContrato } from "@/hooks/useContratos";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { VariablesCard } from "@/components/contratos/VariablesCard";
 import { LegalWarningBanner } from "@/components/common/LegalWarningBanner";
@@ -29,7 +30,7 @@ import {
   antiguedad, aplicaDotacion, aportesMensuales, auxilioTransporte,
   calcularValorEntrada, cumplimientoDe, cumplimientoLabel, diasComerciales,
   FACTORES_HORA, jefeDisplay, liquidacion, presenciaLabel,
-  riesgoDespido, SMMLV_2025, valorHoraOrdinaria, type Employee, type TipoHora,
+  riesgoDespido, SMMLV_2025, valorHoraOrdinaria, type ContractType, type Employee, type TipoHora,
 } from "@/lib/mock/data";
 import type { BackendTimesheetEntry } from "@/lib/types";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -154,21 +155,10 @@ function ProfilePage() {
       <div className="mx-auto max-w-[1440px] px-4 py-10 sm:px-6 lg:px-10">
         {tab === "resumen" && (
           <div className="grid gap-5 lg:grid-cols-2">
-            <DossierCard title="Datos del contrato" icon={<FileText className="h-4 w-4" />}>
-              <Row k="Modalidad" v={e.tipoContrato} dot="ok" />
-              <Row k="Documento" v={`C.C. ${e.cedula}`} dot="ok" />
-              <Row k="Salario mensual" v={formatCOP(e.salario)} dot="warn" />
-              <Row k="Inicio" v={formatDate(e.fechaInicio)} icon={<CalendarDays className="h-3 w-3" />} dot="ok" />
-              <Row k="Terminación" v={e.fechaTerminacion ? formatDate(e.fechaTerminacion) : "Indefinida"} icon={<CalendarDays className="h-3 w-3" />} dot="ok" />
-              <Row k="Jornada" v={e.jornada} dot="ok" />
-              <Row k="Aux. transporte" v={auxilioTransporte(e.salario).texto} icon={<Wallet className="h-3 w-3" />} dot="ok" />
-            </DossierCard>
+            <DatosPersonalesCard empleado={e} />
+            <DatosContratoCard empleado={e} />
             <CargoJerarquiaCard empleado={e} />
-            <DossierCard title="Fueros y estabilidad" icon={<ShieldAlert className="h-4 w-4" />}>
-              {e.fueros.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Sin fueros declarados.</p>
-              ) : e.fueros.map((f) => (<p key={f} className="text-sm text-foreground">· {f}</p>))}
-            </DossierCard>
+            <FuerosEstabilidadCard empleado={e} />
             <DossierCard title="Alertas activas" icon={<ShieldCheck className="h-4 w-4" />}>
               {empAlerts.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Sin alertas abiertas para este colaborador.</p>
@@ -226,6 +216,306 @@ function ProfilePage() {
 
       </div>
     </div>
+  );
+}
+
+const CONTRACT_UI_TO_API: Record<ContractType, string> = {
+  "Término indefinido": "TERMINO_INDEFINIDO",
+  "Término fijo": "TERMINO_FIJO",
+  "Obra o labor": "OBRA_LABOR",
+  "Prestación de servicios": "PRESTACION_SERVICIOS",
+};
+
+const CONTRACT_TYPES_UI: ContractType[] = [
+  "Término indefinido",
+  "Término fijo",
+  "Obra o labor",
+  "Prestación de servicios",
+];
+
+function parseJornadaHoras(jornada: string): string {
+  const m = jornada.match(/(\d+)/);
+  return m ? m[1] : "";
+}
+
+function strOrEmpty(v: string | undefined | null): string {
+  return v && v !== "—" ? v : "";
+}
+
+// ─── Datos personales (editable) ─────────────────────────────────────────────
+function DatosPersonalesCard({ empleado: e }: { empleado: Employee }) {
+  const update = useUpdateColaborador();
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ nombre: "", cedula: "", correo: "", telefono: "" });
+
+  function start() {
+    setForm({
+      nombre: e.nombre,
+      cedula: e.cedula,
+      correo: strOrEmpty(e.correo),
+      telefono: strOrEmpty(e.telefono),
+    });
+    setEditing(true);
+  }
+
+  async function save() {
+    if (!form.nombre.trim() || !form.cedula.trim()) {
+      toast.error("Nombre y cédula son obligatorios");
+      return;
+    }
+    try {
+      await update.mutateAsync({
+        id: e.id,
+        data: {
+          nombre: form.nombre.trim(),
+          cedula: form.cedula.trim(),
+          email: form.correo.trim() || null,
+          telefono: form.telefono.trim() || null,
+        },
+      });
+      toast.success("Datos personales actualizados");
+      setEditing(false);
+    } catch {
+      toast.error("No se pudieron guardar los datos personales");
+    }
+  }
+
+  return (
+    <DossierCard title="Datos personales" icon={<IdCard className="h-4 w-4" />}>
+      {editing ? (
+        <div className="space-y-3">
+          <EditRow label="Nombre completo">
+            <Input value={form.nombre} onChange={(ev) => setForm((f) => ({ ...f, nombre: ev.target.value }))} />
+          </EditRow>
+          <EditRow label="Cédula">
+            <Input value={form.cedula} onChange={(ev) => setForm((f) => ({ ...f, cedula: ev.target.value }))} />
+          </EditRow>
+          <EditRow label="Correo">
+            <Input type="email" value={form.correo} onChange={(ev) => setForm((f) => ({ ...f, correo: ev.target.value }))} />
+          </EditRow>
+          <EditRow label="Teléfono">
+            <Input value={form.telefono} onChange={(ev) => setForm((f) => ({ ...f, telefono: ev.target.value }))} />
+          </EditRow>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="ghost" size="sm" disabled={update.isPending} onClick={() => setEditing(false)}>
+              <X className="mr-1 h-4 w-4" />Cancelar
+            </Button>
+            <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90" disabled={update.isPending} onClick={save}>
+              <Check className="mr-1 h-4 w-4" />Guardar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="mb-1 flex items-center justify-end">
+            <Button variant="ghost" size="sm" className="h-7 rounded-full text-xs text-muted-foreground hover:text-foreground" onClick={start}>
+              <Pencil className="mr-1 h-3.5 w-3.5" />Editar
+            </Button>
+          </div>
+          <Row k="Nombre" v={e.nombre} dot="ok" />
+          <Row k="Documento" v={`C.C. ${e.cedula}`} dot="ok" />
+          <Row k="Correo" v={e.correo} icon={<Mail className="h-3 w-3" />} dot="ok" />
+          <Row k="Teléfono" v={e.telefono} icon={<Phone className="h-3 w-3" />} dot="ok" />
+        </>
+      )}
+    </DossierCard>
+  );
+}
+
+// ─── Datos del contrato (editable en el perfil; sin crear fila en contratos) ─
+function DatosContratoCard({ empleado: e }: { empleado: Employee }) {
+  const { data: contratos = [] } = useContratos();
+  const contrato = useMemo(
+    () => contratos.filter((c) => c.colaboradorId === e.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0],
+    [contratos, e.id],
+  );
+  const updateColaborador = useUpdateColaborador();
+  const updateContrato = useUpdateContrato();
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    tipoContrato: "Término indefinido" as ContractType,
+    salario: "",
+    fechaInicio: "",
+    fechaFin: "",
+    jornadaHorasSemana: "",
+  });
+
+  function start() {
+    setForm({
+      tipoContrato: e.tipoContrato,
+      salario: e.salario > 0 ? String(e.salario) : "",
+      fechaInicio: e.fechaInicio,
+      fechaFin: e.fechaTerminacion ?? "",
+      jornadaHorasSemana: parseJornadaHoras(e.jornada),
+    });
+    setEditing(true);
+  }
+
+  async function save() {
+    const salario = form.salario.trim() === "" ? null : Number(form.salario);
+    const jornada = form.jornadaHorasSemana.trim() === "" ? null : Number(form.jornadaHorasSemana);
+    const laborData = {
+      tipoContrato: CONTRACT_UI_TO_API[form.tipoContrato],
+      fechaInicio: form.fechaInicio || null,
+      fechaFin: form.fechaFin.trim() === "" ? null : form.fechaFin,
+      salario,
+      jornadaHorasSemana: jornada,
+    };
+
+    try {
+      if (contrato) {
+        await updateContrato.mutateAsync({
+          id: contrato.id,
+          data: {
+            ...laborData,
+            nombreColaborador: e.nombre,
+            cedula: e.cedula,
+            cargo: e.cargo !== "—" ? e.cargo : null,
+          },
+        });
+      } else {
+        await updateColaborador.mutateAsync({ id: e.id, data: laborData });
+      }
+      toast.success("Datos del contrato actualizados");
+      setEditing(false);
+    } catch {
+      toast.error("No se pudieron guardar los datos del contrato");
+    }
+  }
+
+  const salarioPreview = form.salario.trim() === "" ? 0 : Number(form.salario);
+  const auxPreview = auxilioTransporte(salarioPreview || e.salario).texto;
+  const pending = updateColaborador.isPending || updateContrato.isPending;
+
+  return (
+    <DossierCard title="Datos del contrato" icon={<FileText className="h-4 w-4" />}>
+      {editing ? (
+        <div className="space-y-3">
+          <EditRow label="Modalidad">
+            <Select value={form.tipoContrato} onValueChange={(v) => setForm((f) => ({ ...f, tipoContrato: v as ContractType }))}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {CONTRACT_TYPES_UI.map((t) => (<SelectItem key={t} value={t}>{t}</SelectItem>))}
+              </SelectContent>
+            </Select>
+          </EditRow>
+          <EditRow label="Salario mensual (COP)">
+            <Input type="number" min={0} value={form.salario} onChange={(ev) => setForm((f) => ({ ...f, salario: ev.target.value }))} />
+          </EditRow>
+          <EditRow label="Fecha de inicio">
+            <Input type="date" value={form.fechaInicio} onChange={(ev) => setForm((f) => ({ ...f, fechaInicio: ev.target.value }))} />
+          </EditRow>
+          <EditRow label="Fecha de terminación">
+            <Input type="date" value={form.fechaFin} onChange={(ev) => setForm((f) => ({ ...f, fechaFin: ev.target.value }))} placeholder="Vacío = indefinida" />
+          </EditRow>
+          <EditRow label="Jornada (h/semana)">
+            <Input type="number" min={1} max={48} value={form.jornadaHorasSemana} onChange={(ev) => setForm((f) => ({ ...f, jornadaHorasSemana: ev.target.value }))} />
+          </EditRow>
+          <p className="text-xs text-muted-foreground">
+            Aux. transporte estimado: {auxPreview} (según salario ingresado)
+          </p>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="ghost" size="sm" disabled={pending} onClick={() => setEditing(false)}>
+              <X className="mr-1 h-4 w-4" />Cancelar
+            </Button>
+            <Button
+              size="sm"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              disabled={pending}
+              onClick={save}
+            >
+              <Check className="mr-1 h-4 w-4" />Guardar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="mb-1 flex items-center justify-end">
+            <Button variant="ghost" size="sm" className="h-7 rounded-full text-xs text-muted-foreground hover:text-foreground" onClick={start}>
+              <Pencil className="mr-1 h-3.5 w-3.5" />Editar
+            </Button>
+          </div>
+          {!contrato && e.salario === 0 && (
+            <p className="mb-3 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+              Completa modalidad, salario y jornada en el perfil. No se crea un contrato digital hasta que cargues un PDF.
+            </p>
+          )}
+          <Row k="Modalidad" v={e.tipoContrato} dot="ok" />
+          <Row k="Salario mensual" v={formatCOP(e.salario)} dot={e.salario > 0 ? "ok" : "warn"} />
+          <Row k="Inicio" v={formatDate(e.fechaInicio)} icon={<CalendarDays className="h-3 w-3" />} dot="ok" />
+          <Row k="Terminación" v={e.fechaTerminacion ? formatDate(e.fechaTerminacion) : "Indefinida"} icon={<CalendarDays className="h-3 w-3" />} dot="ok" />
+          <Row k="Jornada" v={e.jornada} dot="ok" />
+          <Row k="Aux. transporte" v={auxilioTransporte(e.salario).texto} icon={<Wallet className="h-3 w-3" />} dot="ok" />
+        </>
+      )}
+    </DossierCard>
+  );
+}
+
+// ─── Fueros y estabilidad (editable) ─────────────────────────────────────────
+function FuerosEstabilidadCard({ empleado: e }: { empleado: Employee }) {
+  const update = useUpdateColaborador();
+  const [editing, setEditing] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+
+  function start() {
+    setSelected([...e.fueros]);
+    setEditing(true);
+  }
+
+  function toggleFuero(f: string) {
+    setSelected((prev) => (prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]));
+  }
+
+  async function save() {
+    try {
+      await update.mutateAsync({ id: e.id, data: { fueros: selected } });
+      toast.success("Fueros actualizados");
+      setEditing(false);
+    } catch {
+      toast.error("No se pudieron guardar los fueros");
+    }
+  }
+
+  return (
+    <DossierCard title="Fueros y estabilidad" icon={<ShieldAlert className="h-4 w-4" />}>
+      {editing ? (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            {FUEROS_OPTIONS.map((f) => (
+              <label key={f} className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  className="rounded border-border"
+                  checked={selected.includes(f)}
+                  onChange={() => toggleFuero(f)}
+                />
+                {f}
+              </label>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="ghost" size="sm" disabled={update.isPending} onClick={() => setEditing(false)}>
+              <X className="mr-1 h-4 w-4" />Cancelar
+            </Button>
+            <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90" disabled={update.isPending} onClick={save}>
+              <Check className="mr-1 h-4 w-4" />Guardar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="mb-1 flex items-center justify-end">
+            <Button variant="ghost" size="sm" className="h-7 rounded-full text-xs text-muted-foreground hover:text-foreground" onClick={start}>
+              <Pencil className="mr-1 h-3.5 w-3.5" />Editar
+            </Button>
+          </div>
+          {e.fueros.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin fueros declarados.</p>
+          ) : e.fueros.map((f) => (<p key={f} className="text-sm text-foreground">· {f}</p>))}
+        </>
+      )}
+    </DossierCard>
   );
 }
 
@@ -397,19 +687,25 @@ function ContratoTab({ empleado: e }: { empleado: Employee }) {
 
   if (!contrato) {
     return (
-      <EmptyState
-        title="Sin contrato cargado"
-        description="Este colaborador aún no tiene un contrato digitalizado. Puedes cargarlo desde el flujo de contrato."
-        icon={<FileText className="h-6 w-6" />}
-        action={
-          <Link
-            to="/colaboradores/nuevo-contrato"
-            className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/15 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/25"
-          >
-            <FilePlus2 className="h-4 w-4" /> Cargar contrato
-          </Link>
-        }
-      />
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Completa los datos contractuales manualmente o carga un PDF para extracción automática.
+        </p>
+        <DatosContratoCard empleado={e} />
+        <EmptyState
+          title="¿Tienes el contrato en PDF?"
+          description="Puedes cargarlo para extraer las variables automáticamente."
+          icon={<FileText className="h-6 w-6" />}
+          action={
+            <Link
+              to="/colaboradores/nuevo-contrato"
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/15 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/25"
+            >
+              <FilePlus2 className="h-4 w-4" /> Cargar contrato PDF
+            </Link>
+          }
+        />
+      </div>
     );
   }
 

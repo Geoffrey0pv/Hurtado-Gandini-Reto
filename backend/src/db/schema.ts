@@ -79,6 +79,12 @@ export const colaboradores = pgTable("colaboradores", {
   fueros: jsonb("fueros").$type<string[]>().default([]),
   arlNivel: integer("arl_nivel").default(2),      // 1-5
   origen: text("origen").notNull().default("manual"), // manual | contrato
+  // Datos laborales ingresados a mano en el perfil (sin crear fila en contratos).
+  tipoContrato: contractType("tipo_contrato"),
+  fechaInicio: date("fecha_inicio"),
+  fechaFin: date("fecha_fin"),
+  salario: numeric("salario", { precision: 14, scale: 2 }),
+  jornadaHorasSemana: integer("jornada_horas_semana"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   uniqCedulaOrg: uniqueIndex("uniq_cedula_org").on(t.organizationId, t.cedula),
