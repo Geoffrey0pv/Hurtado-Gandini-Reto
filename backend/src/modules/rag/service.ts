@@ -2,7 +2,7 @@
 // Filosofia del spec: "cita o abstención". Cada afirmación debe citar una fuente
 // recuperada; si no hay evidencia, el modelo se ABSTIENE explícitamente.
 // Todo queda registrado en audit_logs para trazabilidad ante el jurado.
-import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, ne, sql } from "drizzle-orm";
 import { cosineDistance } from "drizzle-orm";
 import { env } from "../../config/env.js";
 import { db } from "../../db/index.js";
@@ -57,19 +57,83 @@ export async function retrieveSimilar(
   return rows;
 }
 
+// ── Retrieve para análisis de un contrato ─────────────────────────────
+// Recupera DOS conjuntos y los combina, para que el modelo siempre vea:
+//  (a) las cláusulas del contrato analizado, y
+//  (b) la base de conocimiento legal (normativa + jurisprudencia) que la respalda.
+// Así el RAG contrasta cláusula contra norma en vez de alucinar.
+export async function retrieveForContract(
+  orgId: string,
+  contratoId: string,
+  query: string,
+  kContrato = 6,
+  kConocimiento = 6,
+  threshold = 0.3,
+): Promise<RetrievedChunk[]> {
+  const queryEmbedding = await embed(query);
+  const similarity = sql<number>`1 - (${cosineDistance(documentChunks.embedding, queryEmbedding)})`;
+  const effectiveThreshold = env.LLM_MODE === "mock" ? -1 : threshold;
+
+  const cols = {
+    id: documentChunks.id,
+    content: documentChunks.content,
+    source: documentChunks.source,
+    similarity,
+    contratoId: documentChunks.contratoId,
+  };
+
+  // (a) Cláusulas del contrato analizado.
+  const clausulas = await db
+    .select(cols)
+    .from(documentChunks)
+    .where(
+      and(
+        eq(documentChunks.organizationId, orgId),
+        eq(documentChunks.contratoId, contratoId),
+        gt(similarity, effectiveThreshold),
+      ),
+    )
+    .orderBy(desc(similarity))
+    .limit(kContrato);
+
+  // (b) Conocimiento legal: todo lo que NO es una cláusula de contrato.
+  const conocimiento = await db
+    .select(cols)
+    .from(documentChunks)
+    .where(
+      and(
+        eq(documentChunks.organizationId, orgId),
+        ne(documentChunks.source, "contrato"),
+        gt(similarity, effectiveThreshold),
+      ),
+    )
+    .orderBy(desc(similarity))
+    .limit(kConocimiento);
+
+  return [...clausulas, ...conocimiento];
+}
+
 // ── Prompt del sistema RAG ────────────────────────────────────────────
 const RAG_SYSTEM_PROMPT = `Eres un abogado laboralista colombiano experto en compliance y derecho laboral.
-Tu tarea es analizar riesgos legales en contratos laborales usando EXCLUSIVAMENTE
-las fuentes documentales proporcionadas.
+Analizas UN contrato laboral usando EXCLUSIVAMENTE las FUENTES proporcionadas. Las
+fuentes son de dos tipos y cada una indica su origen entre parentesis:
+- (contrato): clausulas del contrato analizado.
+- (normativa) / (jurisprudencia): tu base de conocimiento legal (Codigo Sustantivo
+  del Trabajo, leyes, decretos y sentencias).
 
-REGLAS ESTRICTAS:
-1. Cada afirmacion que hagas DEBE citar su fuente como [FUENTE N] donde N es el numero de la fuente.
-2. Si NO hay evidencia suficiente en las fuentes para un tema, ABSTENTE explicitamente en el campo "abstenciones".
-3. NUNCA inventes informacion que no este soportada por las fuentes proporcionadas.
-4. Clasifica cada riesgo detectado con severidad: "alta", "media" o "baja".
-5. Para cada riesgo, proporciona una recomendacion concreta y accionable.
-6. El resumen debe ser breve (2-3 oraciones) y reflejar solo lo que las fuentes soportan.
-7. La confianza (0 a 1) debe reflejar que tan bien las fuentes cubren la pregunta.
+METODO OBLIGATORIO (no alucinar):
+1. Funda CADA afirmacion en una fuente concreta y citala como [FUENTE N]. Cuando la
+   fuente mencione un articulo o ley (p. ej. "Art. 64 CST", "Ley 2101 de 2021"),
+   nombralo explicitamente en la descripcion.
+2. Detecta un riesgo SOLO si puedes contrastar una clausula del contrato (fuente
+   tipo contrato) contra una regla de la normativa o jurisprudencia presente en las
+   fuentes. Explica brevemente el contraste (que dice la clausula vs. que exige la norma).
+3. Si la evidencia es insuficiente para un tema, NO inventes: declaralo en "abstenciones".
+4. NO uses conocimiento externo que no este en las fuentes. Si una norma no aparece
+   entre las fuentes, no afirmes su contenido ni su numero de articulo.
+5. severidad: "alta", "media" o "baja". Cada riesgo con una recomendacion concreta y accionable.
+6. El resumen (2-3 oraciones) refleja solo lo soportado por las fuentes. La confianza
+   (0 a 1) refleja que tan bien las fuentes cubren la pregunta.
 
 Responde EXCLUSIVAMENTE con el JSON del schema proporcionado.`;
 
@@ -131,8 +195,8 @@ export async function ragRiskAnalysis(params: {
     );
   }
 
-  // 2) Retrieve: buscar chunks similares al query dentro del tenant.
-  const chunks = await retrieveSimilar(orgId, query, 8, 0.3);
+  // 2) Retrieve: clausulas del contrato + base de conocimiento legal (normativa/jurisprudencia).
+  const chunks = await retrieveForContract(orgId, contratoId, query);
 
   // 3) Si no hay chunks suficientes -> abstencion explicita (no inventar).
   if (chunks.length === 0) {
@@ -163,7 +227,7 @@ export async function ragRiskAnalysis(params: {
     .map((c, i) => `[FUENTE ${i + 1}] (${c.source}, similitud=${c.similarity.toFixed(2)}):\n"${c.content}"`)
     .join("\n\n");
 
-  const userPrompt = `FUENTES RECUPERADAS DEL CONTRATO:\n${sourcesBlock}\n\nPREGUNTA DEL USUARIO:\n${query}`;
+  const userPrompt = `FUENTES RECUPERADAS (clausulas del contrato + normativa/jurisprudencia):\n${sourcesBlock}\n\nPREGUNTA DEL USUARIO:\n${query}`;
 
   // 5) Generate: LLM con salida estructurada + validacion Zod.
   const mockFallback = buildMockResponse(query, chunks);

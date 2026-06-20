@@ -55,10 +55,12 @@ normativa como fuentes adicionales (`source="normativa"`). Documentos sugeridos
 - (Disciplinario) **Reglamento Interno de Trabajo** del cliente — define la gravedad
   de las faltas (FUNDAMENTOS §13.2).
 
-> Estado actual: el pipeline indexa la normativa con el mismo modelo de embeddings,
-> pero **aún no hay endpoint de carga de normativa** (solo contratos). Mientras se
-> agrega, el RAG se fundamenta en las cláusulas del contrato. Marcar este punto en la
-> demo como mejora inmediata (seed de normativa con `source="normativa"`).
+> Cómo cargarla: pon los `.md` (en subcarpetas) bajo `backend/seed/normativa/` y
+> ejecuta `npm run seed:normativa`. El script recorre el árbol, trocea, genera
+> embeddings (bge-m3) e indexa con `source` derivado de la carpeta de primer nivel
+> (`normativa` / `jurisprudencia` / `reglamento` / `plantilla`). Es idempotente.
+> Tras el seed, el RAG recupera por cada análisis las cláusulas del contrato **y** la
+> normativa/jurisprudencia relevante, citando el artículo o ley correspondiente.
 
 ---
 
