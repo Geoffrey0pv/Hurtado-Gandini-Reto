@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
 import { z } from "zod";
-import { AlertTriangle, Briefcase, CalendarDays, Check, ChevronLeft, ChevronRight, CircleDollarSign, Clock, Download, FileText, FilePlus2, Flag, IdCard, Mail, MessageSquare, Paperclip, Phone, Plus, Scale, Send, Shirt, ShieldAlert, ShieldCheck, Timer, Trash2, Umbrella, Wallet } from "lucide-react";
+import { AlertTriangle, Briefcase, CalendarDays, Check, ChevronLeft, ChevronRight, CircleDollarSign, Clock, Download, FileText, FilePlus2, Flag, IdCard, Mail, MessageSquare, Paperclip, Pencil, Phone, Plus, Scale, Send, Shirt, ShieldAlert, ShieldCheck, Timer, Trash2, Umbrella, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { ContextualSubnav } from "@/components/layout/ContextualSubnav";
 import { useEmployees } from "@/lib/store";
@@ -21,6 +21,10 @@ import { useContratos, useContratoAnalisis, useContratoObligaciones } from "@/ho
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { VariablesCard } from "@/components/contratos/VariablesCard";
 import { LegalWarningBanner } from "@/components/common/LegalWarningBanner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useUpdateColaborador } from "@/hooks/useColaboradores";
 import {
   antiguedad, aplicaDotacion, aportesMensuales, auxilioTransporte,
   calcularValorEntrada, cumplimientoDe, cumplimientoLabel, diasComerciales,
@@ -159,21 +163,7 @@ function ProfilePage() {
               <Row k="Jornada" v={e.jornada} dot="ok" />
               <Row k="Aux. transporte" v={auxilioTransporte(e.salario).texto} icon={<Wallet className="h-3 w-3" />} dot="ok" />
             </DossierCard>
-            <DossierCard title="Cargo & jerarquía" icon={<Briefcase className="h-4 w-4" />}>
-              <Row k="Cargo" v={e.cargo} dot="ok" />
-              <Row k="Área" v={e.area} dot="ok" />
-              <Row k="Jefe inmediato" v={jefeDisplay(e)} dot="warn" />
-              <div className="mt-4 border-t border-border pt-4">
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Funciones</p>
-                {e.obligaciones.length > 0 ? (
-                  <ul className="mt-2 space-y-1 text-sm text-foreground">
-                    {e.obligaciones.map((o) => (<li key={o}>· {o}</li>))}
-                  </ul>
-                ) : (
-                  <ManualFuncionesEmpty nombre={e.nombre} empId={e.id} />
-                )}
-              </div>
-            </DossierCard>
+            <CargoJerarquiaCard empleado={e} />
             <DossierCard title="Fueros y estabilidad" icon={<ShieldAlert className="h-4 w-4" />}>
               {e.fueros.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Sin fueros declarados.</p>
@@ -236,6 +226,138 @@ function ProfilePage() {
 
       </div>
     </div>
+  );
+}
+
+// ─── Cargo & jerarquía (editable) ────────────────────────────────────────────
+// Permite asignar cargo, área y JEFE INMEDIATO (otro colaborador). El jefeId se
+// persiste vía PATCH /colaboradores/:id, así el organigrama refleja la jerarquía.
+function CargoJerarquiaCard({ empleado: e }: { empleado: Employee }) {
+  const { employees, areas } = useEmployees();
+  const update = useUpdateColaborador();
+  const [editing, setEditing] = useState(false);
+
+  // El Employee no carga jefeId; resolvemos el jefe actual por nombre.
+  const jefeActualId = useMemo(
+    () => employees.find((x) => x.nombre === e.jefe)?.id ?? "",
+    [employees, e.jefe],
+  );
+  const [form, setForm] = useState({ cargo: "", area: "", jefeId: "" });
+
+  function start() {
+    setForm({
+      cargo: e.cargo === "—" ? "" : e.cargo,
+      area: e.area === "Sin área" ? "" : e.area,
+      jefeId: jefeActualId,
+    });
+    setEditing(true);
+  }
+
+  async function save() {
+    try {
+      await update.mutateAsync({
+        id: e.id,
+        data: {
+          cargo: form.cargo.trim() || null,
+          area: form.area || null,
+          jefeId: form.jefeId || null,
+        },
+      });
+      toast.success("Jerarquía actualizada", { description: "El organigrama refleja el cambio." });
+      setEditing(false);
+    } catch {
+      toast.error("No se pudo actualizar la jerarquía");
+    }
+  }
+
+  const NONE = "__none";
+  const candidatos = useMemo(() => employees.filter((x) => x.id !== e.id), [employees, e.id]);
+
+  return (
+    <DossierCard title="Cargo & jerarquía" icon={<Briefcase className="h-4 w-4" />}>
+      {editing ? (
+        <div className="space-y-3">
+          <EditRow label="Cargo">
+            <Input
+              value={form.cargo}
+              onChange={(ev) => setForm((f) => ({ ...f, cargo: ev.target.value }))}
+              placeholder="Cargo del colaborador"
+            />
+          </EditRow>
+          <EditRow label="Área">
+            <Select value={form.area || NONE} onValueChange={(v) => setForm((f) => ({ ...f, area: v === NONE ? "" : v }))}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>Sin área</SelectItem>
+                {areas.map((a) => (<SelectItem key={a} value={a}>{a}</SelectItem>))}
+              </SelectContent>
+            </Select>
+          </EditRow>
+          <EditRow label="Jefe inmediato">
+            <Select value={form.jefeId || NONE} onValueChange={(v) => setForm((f) => ({ ...f, jefeId: v === NONE ? "" : v }))}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>Sin jefe (reporta a dirección)</SelectItem>
+                {candidatos.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.nombre}{c.cargo && c.cargo !== "—" ? ` · ${c.cargo}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </EditRow>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="ghost" size="sm" disabled={update.isPending} onClick={() => setEditing(false)}>
+              <X className="mr-1 h-4 w-4" />Cancelar
+            </Button>
+            <Button
+              size="sm"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              disabled={update.isPending}
+              onClick={save}
+            >
+              <Check className="mr-1 h-4 w-4" />Guardar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="mb-1 flex items-center justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 rounded-full text-xs text-muted-foreground hover:text-foreground"
+              onClick={start}
+            >
+              <Pencil className="mr-1 h-3.5 w-3.5" />Editar
+            </Button>
+          </div>
+          <Row k="Cargo" v={e.cargo} dot="ok" />
+          <Row k="Área" v={e.area} dot="ok" />
+          <Row k="Jefe inmediato" v={jefeDisplay(e)} dot="warn" />
+        </>
+      )}
+
+      <div className="mt-4 border-t border-border pt-4">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Funciones</p>
+        {e.obligaciones.length > 0 ? (
+          <ul className="mt-2 space-y-1 text-sm text-foreground">
+            {e.obligaciones.map((o) => (<li key={o}>· {o}</li>))}
+          </ul>
+        ) : (
+          <ManualFuncionesEmpty nombre={e.nombre} empId={e.id} />
+        )}
+      </div>
+    </DossierCard>
+  );
+}
+
+function EditRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <div className="mt-1">{children}</div>
+    </label>
   );
 }
 
