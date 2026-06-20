@@ -104,7 +104,15 @@ function ManualWizard() {
             {step === 1 && (
               <Grid>
                 <Field label="Tipo de contrato">
-                  <Select value={data.tipoContrato} onValueChange={(v) => set("tipoContrato", v)}>
+                  <Select
+                    value={data.tipoContrato}
+                    onValueChange={(v) => {
+                      set("tipoContrato", v);
+                      // Un contrato a término indefinido no tiene fecha de
+                      // terminación: la limpiamos al seleccionarlo.
+                      if (v === "Término indefinido") set("fechaTerminacion", "");
+                    }}
+                  >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {["Término indefinido", "Término fijo", "Obra o labor", "Prestación de servicios"].map((t) => (
@@ -123,7 +131,15 @@ function ManualWizard() {
                   </Select>
                 </Field>
                 <Field label="Fecha de inicio"><Input type="date" value={data.fechaInicio} onChange={(e) => set("fechaInicio", e.target.value)} /></Field>
-                <Field label="Fecha de terminación"><Input type="date" value={data.fechaTerminacion} onChange={(e) => set("fechaTerminacion", e.target.value)} /></Field>
+                <Field label="Fecha de terminación">
+                  {data.tipoContrato === "Término indefinido" ? (
+                    <div className="flex h-9 w-full items-center rounded-md border border-dashed border-border bg-background/40 px-3 text-sm text-muted-foreground">
+                      Término indefinido · sin fecha de terminación
+                    </div>
+                  ) : (
+                    <Input type="date" value={data.fechaTerminacion} onChange={(e) => set("fechaTerminacion", e.target.value)} />
+                  )}
+                </Field>
               </Grid>
             )}
             {step === 2 && (
@@ -173,6 +189,9 @@ function ManualWizard() {
                   {Object.entries({
                     Nombre: data.nombre, Cédula: data.cedula, Cargo: data.cargo, Área: data.area,
                     Contrato: data.tipoContrato, Inicio: data.fechaInicio || "—",
+                    Terminación: data.tipoContrato === "Término indefinido"
+                      ? "Sin fecha (indefinido)"
+                      : data.fechaTerminacion || "—",
                     Salario: data.salario || "—", Jornada: data.jornada,
                   }).map(([k, v]) => (
                     <div key={k} className="rounded-xl border border-border bg-background/40 p-4">
